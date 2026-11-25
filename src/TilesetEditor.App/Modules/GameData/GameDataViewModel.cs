@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Input;
 using TilesetEditor.App.Infrastructure;
@@ -108,11 +109,40 @@ public sealed class GameDataRowVm : ObservableObject
         Key.Contains(filter, StringComparison.OrdinalIgnoreCase) || Cells.Any(c => c.Value.Contains(filter, StringComparison.OrdinalIgnoreCase));
 }
 
+/// <summary>An entry of the category filter: rows whose <see cref="Column"/> has <see cref="Value"/> (Column -1 = all rows).</summary>
+public sealed record GameDataCategory(string Label, int Column, string Value)
+{
+    public static readonly GameDataCategory All = new("All", -1, "");
+    public override string ToString() => Label;
+}
+
+/// <summary>A one-click category button ("Poké Balls", "Fire" …); <see cref="Filter"/> null = all entries.</summary>
+public sealed class QuickFilterVm(string label, int count, System.Windows.Media.Imaging.BitmapSource? icon, QuickFilter? filter, Action<QuickFilterVm, bool> toggled) : ObservableObject
+{
+    public string Label { get; } = label;
+    public int Count { get; } = count;
+    public System.Windows.Media.Imaging.BitmapSource? Icon { get; } = icon;
+    public bool HasIcon => Icon != null;
+    public QuickFilter? Filter { get; } = filter;
+
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set { if (Set(ref _isSelected, value)) toggled(this, value); }
+    }
+
+    /// <summary>Sets the state without notifying the view model (when another button is chosen, or when rebuilding the row).</summary>
+    internal void SetQuietly(bool selected) { _isSelected = selected; OnPropertyChanged(nameof(IsSelected)); }
+}
+
 /// <summary>An entry of the left-hand list: one table with its loaded rows (or the load error).</summary>
 public sealed class GameDataTableVm(GameDataTableDef def) : ObservableObject
 {
     public GameDataTableDef Def { get; } = def;
     public GameDataTable? Table { get; set; }
+    /// <summary>The table's one-click categories with their icons (loaded with the table).</summary>
+    public List<QuickFilter> QuickFilters { get; set; } = [];
     public string? Error { get; set; }
     public List<GameDataRowVm> Rows { get; set; } = [];
     public int ChangedCount => Rows.Count(r => r.IsChanged);
@@ -124,7 +154,8 @@ public sealed class GameDataTableVm(GameDataTableDef def) : ObservableObject
 /// <summary>
 /// Game data kept in C tables (trainer classes, items, moves, abilities, Pokémon, types, natures) and the region map
 /// section names. Values are changed in place – only the value text is replaced – and written through the shared file
-/// preview. Values that are expressions, macros or inside #if stay read-only.
+/// preview. Config-dependent values (ternaries, #if blocks) show the current setting and become fixed values when changed;
+/// family-wide macros stay read-only. Items, moves and Pokémon can be filtered by category (pocket, type …).
 /// </summary>
 public sealed class GameDataViewModel : ObservableObject, IToolkitModule
 {
@@ -181,11 +212,86 @@ public sealed class GameDataViewModel : ObservableObject, IToolkitModule
             OnPropertyChanged(nameof(IsTrainerClasses));
             OnPropertyChanged(nameof(TableNote));
             ColumnsChanged?.Invoke(this, EventArgs.Empty);
+            BuildQuickFilters();
+            BuildCategories();
             ApplyFilter();
         }
     }
 
+    /// <summary>The category buttons of the selected table, "All" first.</summary>
+    public ObservableCollection<QuickFilterVm> QuickFilterButtons { get; } = [];
+    public bool HasQuickFilters => QuickFilterButtons.Count > 1;
+    private QuickFilter? _quickFilter;
+
+    private void BuildQuickFilters()
+    {
+        var t = SelectedTable;
+        var keep = _quickFilter?.Label;
+        QuickFilterButtons.Clear();
+        _quickFilter = null;
+        if (t?.Table != null && t.QuickFilters.Count > 0)
+        {
+            QuickFilterButtons.Add(new QuickFilterVm("All", t.Rows.Count, null, null, ChooseQuickFilter));
+            foreach (var f in t.QuickFilters)
+                QuickFilterButtons.Add(new QuickFilterVm(f.Label, f.Count, f.Icon != null ? Imaging.ToBitmap(f.Icon) : null, f, ChooseQuickFilter));
+            var selected = QuickFilterButtons.FirstOrDefault(b => b.Label == keep) ?? QuickFilterButtons[0];
+            _quickFilter = selected.Filter;
+            selected.SetQuietly(true);
+        }
+        OnPropertyChanged(nameof(HasQuickFilters));
+    }
+
+    private void ChooseQuickFilter(QuickFilterVm button, bool selected)
+    {
+        // Clicking the active button again switches back to "All".
+        var chosen = selected ? button : QuickFilterButtons[0];
+        foreach (var b in QuickFilterButtons) if (b != chosen && b.IsSelected) b.SetQuietly(false);
+        if (!chosen.IsSelected) chosen.SetQuietly(true);
+        _quickFilter = chosen.Filter;
+        ApplyFilter();
+    }
+
     public bool IsTrainerClasses => SelectedTable?.Def.Id == "trainer_classes";
+
+    /// <summary>Pockets/kinds of items, types/categories of moves … with their entry counts; "All" first.</summary>
+    public ObservableCollection<GameDataCategory> Categories { get; } = [];
+    public bool HasCategories => Categories.Count > 1;
+
+    private GameDataCategory _category = GameDataCategory.All;
+    public GameDataCategory? Category
+    {
+        get => _category;
+        set { if (Set(ref _category, value ?? GameDataCategory.All)) ApplyFilter(); }
+    }
+
+    private void BuildCategories()
+    {
+        var t = SelectedTable;
+        var keep = _category;
+        Categories.Clear();
+        Categories.Add(GameDataCategory.All);
+        if (t?.Table != null)
+            foreach (var header in t.Def.CategoryColumns)
+            {
+                int col = t.Def.Columns.ToList().FindIndex(c => c.Header == header);
+                if (col < 0) continue;
+                var prefix = t.Def.Columns[col].ConstantPrefix ?? "";
+                foreach (var g in t.Rows.Select(r => r.Row.Cells[col].Original).Where(v => v.Length > 0 && Regex.IsMatch(v, @"^\w+$"))
+                             .GroupBy(v => v).OrderBy(g => g.Key, StringComparer.Ordinal))
+                    Categories.Add(new GameDataCategory($"{header}: {Pretty(g.Key, prefix)}  ({g.Count()})", col, g.Key));
+            }
+        _category = Categories.FirstOrDefault(c => c.Column == keep.Column && c.Value == keep.Value) ?? GameDataCategory.All;
+        OnPropertyChanged(nameof(Category));
+        OnPropertyChanged(nameof(HasCategories));
+    }
+
+    /// <summary>POCKET_POKE_BALLS → "Poke Balls", TYPE_FIRE → "Fire".</summary>
+    private static string Pretty(string constant, string prefix)
+    {
+        var s = constant.StartsWith(prefix, StringComparison.Ordinal) ? constant[prefix.Length..] : constant;
+        return string.Join(' ', s.Split('_', StringSplitOptions.RemoveEmptyEntries)
+            .Select(w => w.Length <= 2 && w.All(char.IsDigit) ? w : char.ToUpperInvariant(w[0]) + w[1..].ToLowerInvariant()));
+    }
     public string TableNote => SelectedTable == null ? "" : SelectedTable.Error ?? SelectedTable.Def.Note;
 
     private string _filter = "", _summary = "", _details = "";
@@ -219,10 +325,14 @@ public sealed class GameDataViewModel : ObservableObject, IToolkitModule
                     var text = GameText.Load(root);
                     return GameDataCatalog.Tables.Select(def =>
                     {
-                        try { return (Table: GameDataCatalog.Load(root, def, text), Error: (string?)null); }
+                        try
+                        {
+                            var table = GameDataCatalog.Load(root, def, text);
+                            return (Table: table, Error: (string?)null, Quick: QuickFilters.For(table, root));
+                        }
                         catch (Exception ex) when (ex is IOException or FormatException or UnauthorizedAccessException or InvalidOperationException)
                         {
-                            return (Table: (GameDataTable?)null, Error: $"{def.Title} could not be read: {ex.Message}");
+                            return (Table: (GameDataTable?)null, Error: $"{def.Title} could not be read: {ex.Message}", Quick: new List<QuickFilter>());
                         }
                     }).ToList();
                 });
@@ -232,6 +342,7 @@ public sealed class GameDataViewModel : ObservableObject, IToolkitModule
                     var vm = Tables[i];
                     vm.Table = loaded[i].Table;
                     vm.Error = loaded[i].Error;
+                    vm.QuickFilters = loaded[i].Quick;
                     vm.Rows = vm.Table == null ? [] : vm.Table.Rows.Select(r => new GameDataRowVm(vm.Table, r, RowChanged)).ToList();
                     vm.Refresh();
                 }
@@ -243,6 +354,8 @@ public sealed class GameDataViewModel : ObservableObject, IToolkitModule
         }
         OnPropertyChanged(nameof(TableNote));
         ColumnsChanged?.Invoke(this, EventArgs.Empty);
+        BuildQuickFilters();
+        BuildCategories();
         ApplyFilter();
         CommandManager.InvalidateRequerySuggested();
     }
@@ -263,8 +376,13 @@ public sealed class GameDataViewModel : ObservableObject, IToolkitModule
         if (t != null)
         {
             var f = Filter.Trim();
+            var cat = _category;
+            var quick = _quickFilter;
             foreach (var r in t.Rows)
-                if ((!ChangedOnly || r.IsChanged) && (f.Length == 0 || r.Matches(f))) Rows.Add(r);
+                if ((!ChangedOnly || r.IsChanged) && (f.Length == 0 || r.Matches(f))
+                    && (cat.Column < 0 || (cat.Column < r.Cells.Count && r.Cells[cat.Column].Value == cat.Value))
+                    && (quick == null || t.Table == null || quick.Matches(c => QuickFilters.Cell(t.Table, r.Row, c))))
+                    Rows.Add(r);
         }
         Selected = keep != null && Rows.Contains(keep) ? keep : null;
         UpdateSummary();

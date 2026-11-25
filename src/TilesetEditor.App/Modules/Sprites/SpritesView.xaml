@@ -19,7 +19,7 @@
             <StackPanel>
                 <TextBlock Text="Overworld sprite" Style="{StaticResource SectionTitle}"/>
                 <TextBlock Text="{Binding Details}" FontFamily="Consolas" TextWrapping="Wrap"/>
-                <Border Background="#F6ECE8" HorizontalAlignment="Left" Padding="6" Margin="0,8,0,6">
+                <Border Background="{DynamicResource BorderBrush}" HorizontalAlignment="Left" Padding="6" Margin="0,8,0,6">
                     <Image Source="{Binding Preview}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                 </Border>
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
@@ -27,7 +27,7 @@
                     <Button Content="Save a copy to edit…" Command="{Binding SaveOverworldCopyCommand}"/>
                 </StackPanel>
 
-                <Border BorderBrush="#F9C9CB" BorderThickness="1" Background="#FFF4F2" Padding="10" CornerRadius="4" HorizontalAlignment="Left" MaxWidth="760">
+                <Border BorderBrush="{DynamicResource PinkStrongBrush}" BorderThickness="1" Background="{DynamicResource HoverBrush}" Padding="10" CornerRadius="4" HorizontalAlignment="Left" MaxWidth="760">
                     <StackPanel>
                         <TextBlock Text="Add new sprite" Style="{StaticResource SectionTitle}"/>
                         <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,0,0,8"
@@ -42,7 +42,7 @@
                         <TextBlock Style="{StaticResource Hint}" FontSize="11" TextWrapping="Wrap"
                                    Text="Walking persons: 9 frames side by side (e.g. 144×32 for 16×32). At most 15 colors plus transparency."/>
                         <TextBlock Text="{Binding CheckReport}" TextWrapping="Wrap" Margin="0,6,0,0"/>
-                        <Border Background="#F6ECE8" HorizontalAlignment="Left" Padding="6" Margin="0,6,0,10">
+                        <Border Background="{DynamicResource BorderBrush}" HorizontalAlignment="Left" Padding="6" Margin="0,6,0,10">
                             <Image Source="{Binding CheckPreview}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                         </Border>
 
@@ -60,7 +60,7 @@
                             </Grid.RowDefinitions>
                             <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,8,4"/>
                             <TextBox Grid.Column="1" Text="{Binding NewName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4" AutomationProperties.Name="Sprite name"/>
-                            <TextBlock Grid.Column="2" Text="{Binding ConstantPreview}" FontFamily="Consolas" Foreground="#6B5B59" VerticalAlignment="Center" Margin="8,0,0,4"/>
+                            <TextBlock Grid.Column="2" Text="{Binding ConstantPreview}" FontFamily="Consolas" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" Margin="8,0,0,4"/>
                             <TextBlock Grid.Row="1" Text="Palette:" VerticalAlignment="Center" Margin="0,0,8,4"/>
                             <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,4">
                                 <RadioButton Content="Use an existing palette" IsChecked="{Binding UseExistingPalette}" GroupName="pal"/>
@@ -103,7 +103,7 @@
                 <StackPanel>
                     <TextBlock Text="{Binding SelectedPlayer.Display}" Style="{StaticResource SectionTitle}"/>
                     <TextBlock Text="{Binding PlayerDetails}" FontFamily="Consolas" FontSize="11" TextWrapping="Wrap"/>
-                    <Border Background="#F6ECE8" HorizontalAlignment="Left" Padding="6" Margin="0,8,0,8">
+                    <Border Background="{DynamicResource BorderBrush}" HorizontalAlignment="Left" Padding="6" Margin="0,8,0,8">
                         <Image Source="{Binding PlayerPreview}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                     </Border>
                     <StackPanel Orientation="Horizontal">
@@ -134,7 +134,7 @@
                 <StackPanel>
                     <TextBlock Text="{Binding SelectedTrainerPic.Constant}" Style="{StaticResource SectionTitle}"/>
                     <TextBlock Text="{Binding TrainerPicDetails}" FontFamily="Consolas" FontSize="11" TextWrapping="Wrap"/>
-                    <Border Background="#F6ECE8" HorizontalAlignment="Left" Padding="6" Margin="0,8,0,8">
+                    <Border Background="{DynamicResource BorderBrush}" HorizontalAlignment="Left" Padding="6" Margin="0,8,0,8">
                         <Image Source="{Binding TrainerPicPreview}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                     </Border>
                     <StackPanel Orientation="Horizontal">

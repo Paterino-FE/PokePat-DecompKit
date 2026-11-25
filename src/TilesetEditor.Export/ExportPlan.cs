@@ -9,11 +9,13 @@ public enum PlannedAction
 {
     Create,
     Modify,
+    /// <summary>The file is removed (backed up first; restored on rollback). Content is ignored.</summary>
+    Delete,
 }
 
 public sealed record PlannedFile(string RelativePath, PlannedAction Action, byte[] Content, string Description, string? ExpectedOriginalSha256 = null)
 {
-    public string ActionText => Action == PlannedAction.Create ? "Create" : "Modify";
+    public string ActionText => Action switch { PlannedAction.Create => "Create", PlannedAction.Delete => "Delete", _ => "Modify" };
     public string SizeText => Content.Length < 1024 ? $"{Content.Length} B" : $"{Content.Length / 1024.0:0.0} KB";
 }
 
@@ -65,6 +67,11 @@ public sealed class ExportOptions
     public bool IncludeSources { get; set; } = true;
     /// <summary>Value written to palette slot 0 (transparent on hardware) instead of the sandbox transparency color.</summary>
     public Rgba32 PaletteSlot0 { get; set; } = Rgba32.Magenta;
+    /// <summary>
+    /// Overwrite the existing secondary tileset <see cref="ExportInput.TilesetName"/> in its folder instead of adding a new one
+    /// (edited images of an existing tileset). Behaviors of the metatiles that already existed are kept.
+    /// </summary>
+    public bool ReplaceExisting { get; set; }
 }
 
 public static class Hashing

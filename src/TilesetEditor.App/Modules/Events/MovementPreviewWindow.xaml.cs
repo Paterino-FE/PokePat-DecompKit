@@ -211,15 +211,17 @@ public partial class MovementPreviewWindow : Window
         var all = _notes.Select(n => (n, false)).Concat(_scene.Problems.Concat(_sim.AllWarnings).Select(w => (w, true))).ToList();
         if (all.Count == 0)
         {
-            WarningList.Children.Add(new TextBlock { Text = "None – every step stays on walkable tiles of the map.", Foreground = new SolidColorBrush(Color.FromRgb(0x15, 0x80, 0x3D)), TextWrapping = TextWrapping.Wrap, FontSize = 11 });
+            var ok = new TextBlock { Text = "None – every step stays on walkable tiles of the map.", TextWrapping = TextWrapping.Wrap, FontSize = 11 };
+            ok.SetResourceReference(TextBlock.ForegroundProperty, "SuccessBrush");
+            WarningList.Children.Add(ok);
             return;
         }
         foreach (var (text, isWarning) in all)
-            WarningList.Children.Add(new TextBlock
-            {
-                Text = (isWarning ? "⚠ " : "ℹ ") + text, TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, 0, 0, 2),
-                Foreground = isWarning ? new SolidColorBrush(Color.FromRgb(0xB9, 0x1C, 0x1C)) : new SolidColorBrush(Color.FromRgb(0x37, 0x41, 0x51)),
-            });
+        {
+            var line = new TextBlock { Text = (isWarning ? "⚠ " : "ℹ ") + text, TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, 0, 0, 2) };
+            line.SetResourceReference(TextBlock.ForegroundProperty, isWarning ? "ErrorBrush" : "InkBrush");
+            WarningList.Children.Add(line);
+        }
     }
 
     // ---------------------------------------------------------------- sprites
@@ -251,8 +253,9 @@ public partial class MovementPreviewWindow : Window
     {
         _graphicsH ??= File.Exists(_project.FullPath("src/data/object_events/object_event_graphics.h"))
             ? File.ReadAllText(_project.FullPath("src/data/object_events/object_event_graphics.h")) : "";
-        var m = Regex.Match(_graphicsH, Regex.Escape(picSymbol) + @"\[\]\s*=\s*INCBIN_U\d+\(\s*""([^""]+)""");
-        return m.Success ? _project.FullPath(Regex.Replace(m.Groups[1].Value, @"\.4bpp(\.\w+)?$", ".png")) : null;
+        // INCBIN (built path → .png) or INCGFX (expansion 1.13+, names the .png directly).
+        return GraphicsIncludes.BySymbol(_graphicsH).TryGetValue(picSymbol, out var inc) && inc.SourcePath.EndsWith(".png", StringComparison.Ordinal)
+            ? _project.FullPath(inc.SourcePath) : null;
     }
 
     /// <summary>First frame for the facing (sAnimTable_Standard: south, north, west; east = west mirrored).</summary>

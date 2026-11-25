@@ -17,6 +17,8 @@ public sealed record SpriteImportResult(ExportPlan Plan, IReadOnlyList<(Rgba32 F
 /// Registers a new overworld sprite in pokeemerald-expansion, using an existing palette tag:
 /// PNG (indexed to the palette), constant + NUM_OBJ_EVENT_GFX, INCBIN, pic table, graphics info, pointer table (extern + entry)
 /// and the gbagfx rule in spritesheet_rules.mk. Insertions go after the last top-level entry of each file (never inside #if).
+/// expansion 1.13+: the constant is an enumerator before NUM_OBJ_EVENT_GFX, and INCGFX carries the gbagfx options
+/// (-mwidth/-mheight), so no make rule is needed.
 /// </summary>
 public static partial class SpriteImportPlanner
 {
@@ -147,15 +149,28 @@ public static partial class SpriteImportPlanner
         // Constant and count
         string consts = Read(ConstantsFile);
         var num = Regex.Match(consts, @"^(#define\s+NUM_OBJ_EVENT_GFX\s+)(\d+)", RegexOptions.Multiline);
-        if (!num.Success) throw new ExportValidationException(["NUM_OBJ_EVENT_GFX not found."]);
-        int id = int.Parse(num.Groups[2].Value);
-        var lastNumbered = Regex.Matches(consts[..num.Index], @"^#define\s+OBJ_EVENT_GFX_\w+\s+\d+[^\n]*\n", RegexOptions.Multiline).LastOrDefault()
-                           ?? throw new ExportValidationException(["No numbered OBJ_EVENT_GFX constants found."]);
-        int column = Regex.Match(lastNumbered.Value, @"^#define\s+\w+\s+(\d+)").Groups[1].Index; // align like the existing constants
-        string head = $"#define {constant}";
-        string newConst = (head.Length < column ? head.PadRight(column) : head + " ") + id + "\n";
-        consts = consts.Insert(lastNumbered.Index + lastNumbered.Length, newConst);
-        consts = Regex.Replace(consts, @"^(#define\s+NUM_OBJ_EVENT_GFX\s+)\d+", m => m.Groups[1].Value + (id + 1), RegexOptions.Multiline);
+        var numEnum = Regex.Match(consts, @"^([ \t]*)NUM_OBJ_EVENT_GFX[ \t]*,", RegexOptions.Multiline);
+        int id;
+        if (num.Success)
+        {
+            id = int.Parse(num.Groups[2].Value);
+            var lastNumbered = Regex.Matches(consts[..num.Index], @"^#define\s+OBJ_EVENT_GFX_\w+\s+\d+[^\n]*\n", RegexOptions.Multiline).LastOrDefault()
+                               ?? throw new ExportValidationException(["No numbered OBJ_EVENT_GFX constants found."]);
+            int column = Regex.Match(lastNumbered.Value, @"^#define\s+\w+\s+(\d+)").Groups[1].Index; // align like the existing constants
+            string head = $"#define {constant}";
+            string newConst = (head.Length < column ? head.PadRight(column) : head + " ") + id + "\n";
+            consts = consts.Insert(lastNumbered.Index + lastNumbered.Length, newConst);
+            consts = Regex.Replace(consts, @"^(#define\s+NUM_OBJ_EVENT_GFX\s+)\d+", m => m.Groups[1].Value + (id + 1), RegexOptions.Multiline);
+        }
+        else if (numEnum.Success)
+        {
+            // expansion 1.13+: enum ObjEventGfx { …, NUM_OBJ_EVENT_GFX, } – the new enumerator goes directly before the count.
+            var defines = new CDefines();
+            defines.AddFromText(consts);
+            id = (int)(defines.TryEvaluate("NUM_OBJ_EVENT_GFX") ?? throw new ExportValidationException(["The value of NUM_OBJ_EVENT_GFX could not be determined."]));
+            consts = consts.Insert(numEnum.Index, numEnum.Groups[1].Value + constant + ",\n");
+        }
+        else throw new ExportValidationException(["NUM_OBJ_EVENT_GFX not found."]);
         string tagNote = "";
         if (newPal)
         {
@@ -182,12 +197,17 @@ public static partial class SpriteImportPlanner
         }
         files.Add(Modify(ConstantsFile, consts, $"{constant} = {id}, NUM_OBJ_EVENT_GFX {id} → {id + 1}{tagNote}"));
 
-        string gfxText = InsertAfterLastTopLevel(Read(GraphicsFile), @"^const u32 gObjectEventPic_\w+\[\]",
-            $"const u32 {pic}[] = INCBIN_U32(\"graphics/object_events/pics/people/{file}.4bpp\");\n");
+        string gfxText = Read(GraphicsFile);
+        bool incGfx = GraphicsIncludes.UsesIncGfx(gfxText);
+        string mwh = $"-mwidth {req.FrameWidth / 8} -mheight {req.FrameHeight / 8}";
+        gfxText = InsertAfterLastTopLevel(gfxText, @"^const u32 gObjectEventPic_\w+\[\]", incGfx
+            ? $"const u32 {pic}[] = {GraphicsInclude.Format(true, 32, pngRel, ".4bpp", mwh)};\n"
+            : $"const u32 {pic}[] = INCBIN_U32(\"graphics/object_events/pics/people/{file}.4bpp\");\n");
         if (newPal)
-            gfxText = InsertAfterLastTopLevel(gfxText, @"^const u16 gObjectEventPal_\w+\[\]",
-                $"const u16 {palSym}[] = INCBIN_U16(\"{palRel[..^4]}.gbapal\");\n");
-        files.Add(Modify(GraphicsFile, gfxText, newPal ? $"INCBIN {pic} and {palSym}" : $"INCBIN {pic}"));
+            gfxText = InsertAfterLastTopLevel(gfxText, @"^const u16 gObjectEventPal_\w+\[\]", incGfx
+                ? $"const u16 {palSym}[] = {GraphicsInclude.Format(true, 16, palRel, ".gbapal")};\n"
+                : $"const u16 {palSym}[] = INCBIN_U16(\"{palRel[..^4]}.gbapal\");\n");
+        files.Add(Modify(GraphicsFile, gfxText, newPal ? $"{(incGfx ? "INCGFX" : "INCBIN")} {pic} and {palSym}" : $"{(incGfx ? "INCGFX" : "INCBIN")} {pic}"));
         if (newPal)
             files.Add(Modify(MovementFile, InsertIntoPaletteTable(Read(MovementFile), palSym, palTag), $"Palette table entry {{{palSym}, {palTag}}}"));
         files.Add(Modify(PicTablesFile, InsertAfterLastTopLevelBlock(Read(PicTablesFile), @"^static const struct SpriteFrameImage sPicTable_\w+\[\]",
@@ -200,10 +220,13 @@ public static partial class SpriteImportPlanner
                         ?? throw new ExportValidationException(["Pointer table gObjectEventGraphicsInfoPointers not found."]);
         pointers = pointers.Insert(lastEntry.Index + lastEntry.Length, $"    [{constant}] = &{info},\n");
         files.Add(Modify(PointersFile, pointers, $"Pointer [{constant}] and extern declaration"));
-        var rules = Read(RulesFile);
-        if (!rules.EndsWith('\n')) rules += "\n";
-        rules += $"\n$(OBJEVENTGFXDIR)/people/{file}.4bpp: %.4bpp: %.png\n\t$(GFX) $< $@ -mwidth {req.FrameWidth / 8} -mheight {req.FrameHeight / 8}\n";
-        files.Add(Modify(RulesFile, rules, $"gbagfx rule for {file}.4bpp (-mwidth {req.FrameWidth / 8} -mheight {req.FrameHeight / 8})"));
+        if (!incGfx)
+        {
+            var rules = Read(RulesFile);
+            if (!rules.EndsWith('\n')) rules += "\n";
+            rules += $"\n$(OBJEVENTGFXDIR)/people/{file}.4bpp: %.4bpp: %.png\n\t$(GFX) $< $@ {mwh}\n";
+            files.Add(Modify(RulesFile, rules, $"gbagfx rule for {file}.4bpp ({mwh})"));
+        }
 
         var plan = ExportPlan.ForFiles(root, $"New overworld sprite {constant}", "graphics/object_events/pics/people", files);
         plan.Notes.Add(newPal

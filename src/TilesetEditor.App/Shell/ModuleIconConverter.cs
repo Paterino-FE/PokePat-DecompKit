@@ -19,6 +19,7 @@ public sealed class ModuleIconConverter : IValueConverter
         "Sprites" => "🧍",
         "Graphics" => "🖼",
         "Features" => "⚙",
+        "Mods" => "🧩",
         _ => "✦",
     };
 

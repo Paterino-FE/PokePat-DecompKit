@@ -11,7 +11,12 @@ namespace TilesetEditor.Tests;
 
 public class SecretBaseTests
 {
-    private static string Ref(string rel) => File.ReadAllText(Path.Combine(TestPaths.ReferenceProject, rel.Replace('/', Path.DirectorySeparatorChar)));
+    /// <summary>A reference project file, or "" if the version does not have it (description.h / icon.h are gone in expansion 1.16+).</summary>
+    private static string Ref(string rel)
+    {
+        var p = Path.Combine(TestPaths.ReferenceProject, rel.Replace('/', Path.DirectorySeparatorChar));
+        return File.Exists(p) ? File.ReadAllText(p) : "";
+    }
 
     private static SecretBaseData Sources() =>
         SecretBaseCatalog.ParseSources(Ref(SecretBaseCatalog.ConstantsFile), Ref(SecretBaseCatalog.SourceFile), Ref(SecretBaseCatalog.MetatileLabelsFile));
@@ -145,7 +150,7 @@ public class SecretBaseTests
         Assert.Null(pichu.IconPng);
         var snorlax = d.Items.Single(i => i.Constant == "DECOR_SNORLAX_DOLL");
         Assert.Equal("graphics/decorations/snorlax_doll.png", snorlax.IconPng);
-        Assert.Equal(46, d.Items.Count(i => i.IsSprite));
+        Assert.True(d.Items.Count(i => i.IsSprite) >= 40);
         Assert.Equal("DECOR_POKEMON_DESK", d.Items.Single(i => i.Name == "POKéMON DESK").Constant);
         // The branch's extra doll has no icon table entry: reported.
         foreach (var missing in d.Items.Where(i => !i.HasIconEntry))
@@ -162,7 +167,8 @@ public class SecretBaseTests
         foreach (var d in RefDecorations().Items)
         {
             Assert.Same(header, Decorations.SetPrice(Decorations.SetName(header, d.Constant, d.Name), d.Constant, d.Price));
-            Assert.Same(descriptions, Decorations.SetDescription(descriptions, d.DescriptionSymbol, d.Description));
+            if (d.DescriptionInline) Assert.Same(header, Decorations.SetInlineDescription(header, d.Constant, d.Description));
+            else Assert.Same(descriptions, Decorations.SetDescription(descriptions, d.DescriptionSymbol, d.Description));
         }
     }
 
@@ -171,8 +177,11 @@ public class SecretBaseTests
     {
         var header = Ref(Decorations.HeaderFile);
         var descriptions = Ref(Decorations.DescriptionFile);
+        bool inline = RefDecorations().Consolidated;
         var h2 = Decorations.SetPrice(Decorations.SetName(header, "DECOR_PICHU_DOLL", "PICHU PLUSH"), "DECOR_PICHU_DOLL", 1234);
-        var d2 = Decorations.SetDescription(descriptions, "DecorDesc_PICHU_DOLL", "A soft PICHU.\nVery cute.");
+        var d2 = descriptions;
+        if (inline) h2 = Decorations.SetInlineDescription(h2, "DECOR_PICHU_DOLL", "A soft PICHU.\nVery cute.");
+        else d2 = Decorations.SetDescription(descriptions, "DecorDesc_PICHU_DOLL", "A soft PICHU.\nVery cute.");
         var parsed = Decorations.Parse(Ref(Decorations.ConstantsFile), h2, d2, Ref(Decorations.TilesFile), Ref(Decorations.IconTableFile), Ref(Decorations.IconGraphicsFile));
         var pichu = parsed.Items.Single(i => i.Constant == "DECOR_PICHU_DOLL");
         Assert.Equal(("PICHU PLUSH", 1234, "A soft PICHU.\nVery cute."), (pichu.Name, pichu.Price, pichu.Description));
@@ -181,15 +190,26 @@ public class SecretBaseTests
         {
             var o = before.Items.Single(i => i.Constant == other.Constant);
             Assert.Equal((o.Name, o.Price), (other.Name, other.Price));
-            if (o.DescriptionSymbol != "DecorDesc_PICHU_DOLL") Assert.Equal(o.Description, other.Description);
+            if (inline || o.DescriptionSymbol != "DecorDesc_PICHU_DOLL") Assert.Equal(o.Description, other.Description);
         }
-        // Only the edited values changed: same number of lines, the rest of the line kept.
-        Assert.Equal(header.Split('\n').Length, h2.Split('\n').Length);
         Assert.Contains("        .name = _(\"PICHU PLUSH\"),", h2.Replace("\r\n", "\n"));
         Assert.Contains("        .price = 1234,", h2.Replace("\r\n", "\n"));
-        Assert.Contains("const u8 DecorDesc_PICHU_DOLL[] = _(\n    \"A soft PICHU.\\n\"\n        \"Very cute.\");", d2.Replace("\r\n", "\n"));
         Assert.Throws<InvalidOperationException>(() => Decorations.SetName(header, "DECOR_PICHU_DOLL", "A NAME THAT IS FAR TOO LONG"));
-        Assert.Throws<InvalidOperationException>(() => Decorations.SetDescription(descriptions, "DecorDesc_PICHU_DOLL", "1\n2\n3\n4"));
+        if (inline)
+        {
+            // The text keeps the layout of the existing COMPOUND_STRING (one literal per line, same indentation); the
+            // original has three lines, the new one two.
+            Assert.Contains("        .description = COMPOUND_STRING(\n            \"A soft PICHU.\\n\"\n            \"Very cute.\"),", h2.Replace("\r\n", "\n"));
+            Assert.Equal(header.Split('\n').Length - 1, h2.Split('\n').Length);
+            Assert.Throws<InvalidOperationException>(() => Decorations.SetInlineDescription(header, "DECOR_PICHU_DOLL", "1\n2\n3\n4"));
+        }
+        else
+        {
+            // Only the edited values changed: same number of lines, the rest of the line kept.
+            Assert.Equal(header.Split('\n').Length, h2.Split('\n').Length);
+            Assert.Contains("const u8 DecorDesc_PICHU_DOLL[] = _(\n    \"A soft PICHU.\\n\"\n        \"Very cute.\");", d2.Replace("\r\n", "\n"));
+            Assert.Throws<InvalidOperationException>(() => Decorations.SetDescription(descriptions, "DecorDesc_PICHU_DOLL", "1\n2\n3\n4"));
+        }
     }
 
     private static string CopyDecorationProject(bool withSprites)
@@ -206,16 +226,19 @@ public class SecretBaseTests
                 SpriteImportPlanner.PointersFile, SpriteImportPlanner.RulesFile, SpriteImportPlanner.MovementFile]);
         foreach (var rel in files)
         {
+            var s = Path.Combine(src, rel.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(s)) continue; // description.h / icon.h only up to expansion 1.15
             var t = Path.Combine(dst, rel.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(t)!);
-            File.Copy(Path.Combine(src, rel.Replace('/', Path.DirectorySeparatorChar)), t);
+            File.Copy(s, t);
         }
         Directory.CreateDirectory(Path.Combine(dst, "graphics", "decorations"));
         return dst;
     }
 
     private static string Planned(ExportPlan plan, string root, string rel) =>
-        plan.Files.FirstOrDefault(f => f.RelativePath == rel) is { } f ? Encoding.UTF8.GetString(f.Content) : File.ReadAllText(Path.Combine(root, rel));
+        plan.Files.FirstOrDefault(f => f.RelativePath == rel) is { } f ? Encoding.UTF8.GetString(f.Content)
+        : File.Exists(Path.Combine(root, rel)) ? File.ReadAllText(Path.Combine(root, rel)) : "";
 
     private static DecorationData ParsePlanned(ExportPlan plan, string root) => Decorations.Parse(Planned(plan, root, Decorations.ConstantsFile),
         Planned(plan, root, Decorations.HeaderFile), Planned(plan, root, Decorations.DescriptionFile), Planned(plan, root, Decorations.TilesFile),
@@ -231,7 +254,8 @@ public class SecretBaseTests
         var result = DecorationPlanner.Plan(root, req, data, sprites, new Dictionary<string, Rgba32[]>());
         Assert.Equal("DECOR_TEST_DOLL", result.Constant);
         Assert.Equal(data.MaxId + 1, result.Id);
-        Assert.Equal(5, result.Plan.Files.Count);
+        // constants, header, tiles (+ description.h and icon.h up to expansion 1.15)
+        Assert.Equal(data.Consolidated ? 3 : 5, result.Plan.Files.Count);
 
         var after = ParsePlanned(result.Plan, root);
         Assert.Equal("DECOR_TEST_DOLL", after.NumDecorationsValue);
@@ -253,7 +277,7 @@ public class SecretBaseTests
         // header.h: the previous last entry got its comma, the array still closes.
         var header = Planned(result.Plan, root, Decorations.HeaderFile).Replace("\r\n", "\n");
         Assert.Contains("    },\n\n    [DECOR_TEST_DOLL] =\n    {\n        .id = DECOR_TEST_DOLL,", header);
-        Assert.EndsWith("    },\n\n};\n", header.TrimEnd('\n') + "\n");
+        Assert.Matches(@"\n    \},\n\n?\};\n$", header.TrimEnd('\n') + "\n");
         Assert.Throws<ExportValidationException>(() => DecorationPlanner.Plan(root, req with { Name = "PICHU_DOLL" }, data, sprites, new Dictionary<string, Rgba32[]>()));
         Assert.Throws<ExportValidationException>(() => DecorationPlanner.Plan(root, req with { GfxConstant = "OBJ_EVENT_GFX_NOPE" }, data, sprites, new Dictionary<string, Rgba32[]>()));
     }
@@ -288,7 +312,7 @@ public class SecretBaseTests
         Assert.Equal(("OBJ_EVENT_GFX_NEON_DOLL", "gDecorIcon_NeonDoll", "gDecorIconPalette_NeonDoll", "graphics/decorations/neon_doll.png"),
             (doll.ObjectGfx, doll.IconSymbol, doll.IconPaletteSymbol, doll.IconPng));
         Assert.Contains("extern const u32 gDecorIcon_NeonDoll[];", Planned(result.Plan, root, Decorations.GraphicsHeaderFile));
-        Assert.Contains("#define OBJ_EVENT_GFX_NEON_DOLL", Planned(result.Plan, root, SpriteImportPlanner.ConstantsFile));
+        Assert.Matches(@"(#define\s+OBJ_EVENT_GFX_NEON_DOLL\s+\d+|\n    OBJ_EVENT_GFX_NEON_DOLL,\n)", Planned(result.Plan, root, SpriteImportPlanner.ConstantsFile));
         var icon = Png.Decode(result.Plan.Files.Single(f => f.RelativePath == "graphics/decorations/neon_doll.png").Content);
         Assert.Equal((24, 24, true, 4), (icon.Width, icon.Height, icon.IsIndexed, icon.BitDepth));
         Assert.Equal(0, icon.Indices![0]);

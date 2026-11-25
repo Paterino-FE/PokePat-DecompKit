@@ -14,8 +14,8 @@
             </Grid.RowDefinitions>
             <Grid.Resources>
                 <Style TargetType="TextBlock"><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Margin" Value="0,4"/></Style>
-                <Style TargetType="ComboBox"><Setter Property="Margin" Value="0,4"/></Style>
-                <Style TargetType="TextBox"><Setter Property="Margin" Value="0,4"/></Style>
+                <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}"><Setter Property="Margin" Value="0,4"/></Style>
+                <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}"><Setter Property="Margin" Value="0,4"/></Style>
             </Grid.Resources>
             <TextBlock x:Name="GraphicsLabel" Text="Appearance (sprite)"/>
             <ComboBox x:Name="Graphics" Grid.Column="1" IsEditable="True" AutomationProperties.Name="Sprite">
@@ -26,7 +26,7 @@
                 <TextBox x:Name="X" Width="60" AutomationProperties.Name="X"/>
                 <TextBlock Text="  /  "/>
                 <TextBox x:Name="Y" Width="60" AutomationProperties.Name="Y"/>
-                <TextBlock x:Name="SizeInfo" Foreground="#7D6B69" Margin="10,4,0,4"/>
+                <TextBlock x:Name="SizeInfo" Foreground="{DynamicResource MutedBrush}" Margin="10,4,0,4"/>
             </StackPanel>
             <TextBlock x:Name="MovementLabel" Grid.Row="2" Text="Movement"/>
             <ComboBox x:Name="Movement" Grid.Column="1" Grid.Row="2" IsEditable="True" AutomationProperties.Name="Movement">
@@ -44,7 +44,7 @@
                 <TextBlock Text="  =  "/>
                 <TextBox x:Name="VarValue" Width="50" Text="0" AutomationProperties.Name="Value"/>
             </StackPanel>
-            <TextBlock x:Name="Error" Grid.Row="6" Grid.ColumnSpan="2" Foreground="#B91C1C" TextWrapping="Wrap"/>
+            <TextBlock x:Name="Error" Grid.Row="6" Grid.ColumnSpan="2" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap"/>
         </Grid>
         <TextBlock Style="{StaticResource Hint}" FontSize="11" Margin="0,6,0,0"
                    x:Name="Info" Text="The entry is appended to the end of the matching list in map.json (like Porymap does). The toolkit shows the file change before writing."/>

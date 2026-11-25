@@ -13,6 +13,7 @@ using TilesetEditor.Core.Artwork;
 using TilesetEditor.Core.Gba;
 using TilesetEditor.Core.Imaging;
 using TilesetEditor.Core.Project;
+using TilesetEditor.Core.Tilesets;
 using TilesetEditor.Export;
 
 namespace TilesetEditor.App.Modules.Tilesets;
@@ -45,6 +46,10 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
         _ctx.ProjectChanged += (_, _) => OnProjectChanged();
         OpenImageCommand = new RelayCommand(OpenImage, () => _ctx.IsOpen && !IsCompiling);
         OpenLayersCommand = new RelayCommand(OpenLayers, () => _ctx.IsOpen && !IsCompiling);
+        ImportFinishedCommand = new RelayCommand(() => ImportFinished(null), () => _ctx.IsOpen && !IsCompiling);
+        EditExistingCommand = new RelayCommand(EditExisting, () => _ctx.IsOpen && !IsCompiling && EditTarget != null);
+        NewBlankCommand = new RelayCommand(NewBlank, () => _ctx.IsOpen && !IsCompiling);
+        OpenWorkFolderCommand = new RelayCommand(() => { if (WorkFolder != null) OpenFolder(WorkFolder); }, () => WorkFolder != null);
         CompileCommand = new AsyncRelayCommand(CompileAsync, () => _ctx.IsOpen && Artwork != null && SelectedPrimary != null && !IsCompiling);
         CancelCompileCommand = new RelayCommand(() => _cts?.Cancel(), () => IsCompiling);
         ExportCommand = new RelayCommand(Export, () => IsCompiledCurrent && !IsCompiling);
@@ -71,6 +76,16 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
     // ---- Commands
     public ICommand OpenImageCommand { get; }
     public ICommand OpenLayersCommand { get; }
+    /// <summary>Opens the import of a finished tileset folder (Porymap format).</summary>
+    public ICommand ImportFinishedCommand { get; }
+
+    /// <summary>The import window for a finished tileset; a dropped folder is analysed right away.</summary>
+    public void ImportFinished(string? folder)
+    {
+        if (_ctx.Project is not { } project) { Message("Please open a project folder first."); return; }
+        var w = new ImportTilesetWindow(project, folder) { Owner = Owner };
+        if (w.ShowDialog() == true && w.Imported) _ctx.Reload();
+    }
     public ICommand CompileCommand { get; }
     public ICommand CancelCompileCommand { get; }
     public ICommand ExportCommand { get; }
@@ -247,6 +262,9 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
             return;
         }
         foreach (var t in p.PrimaryTilesets) PrimaryTilesets.Add(t);
+        SecondaryTilesets.Clear();
+        foreach (var t in p.SecondaryTilesets) SecondaryTilesets.Add(t.Name);
+        EditTarget ??= SecondaryTilesets.FirstOrDefault();
         var c = p.Constants;
         ProjectSummary = $"{c.LayerMode} layer · Secondary: up to {c.MaxSecondaryTiles} tiles, {c.MaxSecondaryMetatiles} metatiles, " +
                          $"palettes {c.NumPalsInPrimary}–{c.NumPalsTotal - 1} · attributes {p.Attributes.SizeBytes} bytes";
@@ -255,7 +273,7 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
         var keep = SelectedPrimary?.Name;
         _selectedPrimary = null;
         SelectedPrimary = PrimaryTilesets.FirstOrDefault(t => t.Name == keep) ?? PrimaryTilesets.FirstOrDefault(t => t.Name == "gTileset_General") ?? PrimaryTilesets.FirstOrDefault();
-        if (_tilesetName == "gTileset_NewTileset" || p.FindTileset(_tilesetName) != null) _tilesetName = SuggestFreeName(p);
+        if (ReplaceTarget == null && (_tilesetName == "gTileset_NewTileset" || p.FindTileset(_tilesetName) != null)) _tilesetName = SuggestFreeName(p);
         OnPropertyChanged(nameof(TilesetName));
         ValidateName();
     }
@@ -281,6 +299,14 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
     private void ValidateName()
     {
         var p = _ctx.Project;
+        if (p != null && ReplaceTarget != null && TilesetName == ReplaceTarget)
+        {
+            NameError = null;
+            FolderPreview = $"Replaces {ReplaceTarget} in its folder (same metatile order, behaviors kept). Change the name to make a new tileset instead.";
+            OnPropertyChanged(nameof(IsReplacing));
+            return;
+        }
+        OnPropertyChanged(nameof(IsReplacing));
         var err = TilesetNaming.Validate(TilesetName);
         if (err == null && p != null)
         {
@@ -318,9 +344,186 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
 
     // ---- Import
 
+    // ---- Edit as images (round trip with an external paint program)
+
+    /// <summary>Secondary tilesets that can be edited as images.</summary>
+    public ObservableCollection<string> SecondaryTilesets { get; } = [];
+    private string? _editTarget;
+    public string? EditTarget { get => _editTarget; set => Set(ref _editTarget, value); }
+
+    /// <summary>Set while an existing tileset is edited: exporting under this name replaces it in place.</summary>
+    private string? _replaceTarget;
+    public string? ReplaceTarget { get => _replaceTarget; private set { if (Set(ref _replaceTarget, value)) { OnPropertyChanged(nameof(IsReplacing)); ValidateName(); } } }
+    public bool IsReplacing => ReplaceTarget != null && TilesetName == ReplaceTarget;
+
+    private string? _workFolder;
+    /// <summary>The folder with bottom/middle/top.png that is being watched.</summary>
+    public string? WorkFolder { get => _workFolder; private set { if (Set(ref _workFolder, value)) OnPropertyChanged(nameof(HasWorkFolder)); } }
+    public bool HasWorkFolder => WorkFolder != null;
+
+    private bool _autoRebuild = true;
+    /// <summary>Re-read the images and compile again when they are saved in the paint program.</summary>
+    public bool AutoRebuild { get => _autoRebuild; set => Set(ref _autoRebuild, value); }
+
+    private FileSystemWatcher? _watcher;
+    private System.Windows.Threading.DispatcherTimer? _reloadTimer;
+
+    /// <summary>
+    /// Writes the layers of the chosen secondary tileset as bottom/middle/top.png into its tileset_editor folder (or uses the
+    /// images stored there by an earlier export), opens the folder and loads them; exporting then replaces the tileset.
+    /// </summary>
+    private void EditExisting()
+    {
+        var p = _ctx.Project;
+        if (p == null || EditTarget is not { } name || p.FindTileset(name) is not { IsFullyResolved: true } t) return;
+        if (!ConfirmDiscard()) return;
+        try
+        {
+            var folder = p.FullPath(Path.GetDirectoryName(t.MetatilesPath!)!.Replace('\\', '/') + "/" + ExportPlanner.SourcesFolder);
+            // The primary it is used with on maps (most common), else General.
+            var primaryName = p.Layouts.Where(l => l.SecondaryTileset == name && l.PrimaryTileset != null).GroupBy(l => l.PrimaryTileset!)
+                .OrderByDescending(g => g.Count()).Select(g => g.Key).FirstOrDefault() ?? "gTileset_General";
+            var primary = p.FindTileset(primaryName) ?? p.PrimaryTilesets.First();
+            var data = p.LoadTilesetData(t);
+            var paths = ExistingSources(folder, data.MetatileCount);
+            string how;
+            if (paths != null) how = "the images stored with it";
+            else
+            {
+                paths = TilesetLayers.Save(TilesetLayers.Decompile(p, p.LoadTilesetData(primary), data), folder);
+                how = "its tiles, palettes and metatiles";
+            }
+            SelectedPrimary = PrimaryTilesets.FirstOrDefault(x => x.Name == primary.Name) ?? SelectedPrimary;
+            LoadWorkFolder(folder, paths);
+            ReplaceTarget = name;
+            TilesetName = name;
+            AppendLog($"{name}: layers from {how} in {folder}. Edit them in your paint program and save – PokePat rebuilds the preview.");
+            OpenFolder(folder);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException or ArtworkImportException)
+        {
+            MessageBox.Show(Owner, ex.Message, "Edit tileset", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    /// <summary>bottom/middle/top.png of an earlier export if they still have the tileset's metatile count, else null.</summary>
+    private static Dictionary<Layer, string>? ExistingSources(string folder, int metatiles)
+    {
+        if (!Directory.Exists(folder)) return null;
+        var found = new Dictionary<Layer, string>();
+        foreach (var layer in new[] { Layer.Bottom, Layer.Middle, Layer.Top })
+        {
+            var f = Path.Combine(folder, LayerNames.PorytilesFile(layer));
+            if (File.Exists(f)) found[layer] = f;
+        }
+        if (found.Count == 0) return null;
+        var png = Png.Load(found.Values.First());
+        return png.Width / 16 * (png.Height / 16) >= metatiles && (png.Width / 16 * (png.Height / 16)) - metatiles < 8 ? found : null;
+    }
+
+    /// <summary>A new tileset from empty layers in Documents\PokePat Tilesets\&lt;name&gt;.</summary>
+    private void NewBlank()
+    {
+        var p = _ctx.Project;
+        if (p == null || !ConfirmDiscard()) return;
+        var dlg = new InputDialog("New tileset", "Empty layers to paint in your paint program (bottom, middle, top – 8 metatiles per row).",
+            ("Name", SuggestFreeName(p)), ("Metatiles", "128")) { Owner = Owner };
+        if (dlg.ShowDialog() != true) return;
+        var name = TilesetNaming.Suggest(dlg.Values[0]);
+        if (!int.TryParse(dlg.Values[1], out var count) || count < 8) count = 128;
+        count = Math.Min(count, p.Constants.MaxSecondaryMetatiles);
+        var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "PokePat Tilesets", TilesetNaming.ToFolderName(name));
+        try
+        {
+            var paths = File.Exists(Path.Combine(folder, "middle.png")) ? ArtworkLoader.AssignLayers(Directory.GetFiles(folder, "*.png"))
+                : TilesetLayers.Save(TilesetLayers.Blank(count), folder);
+            LoadWorkFolder(folder, paths);
+            ReplaceTarget = null;
+            TilesetName = name;
+            AppendLog($"New tileset {name}: empty layers in {folder}. Paint the middle layer first (ground/objects), the top layer for things the player walks behind.");
+            OpenFolder(folder);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArtworkImportException)
+        {
+            MessageBox.Show(Owner, ex.Message, "New tileset", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void LoadWorkFolder(string folder, Dictionary<Layer, string> paths)
+    {
+        _undo.Clear();
+        _compile = null;
+        CompiledImage = null;
+        SelectedTile = null;
+        Artwork = ArtworkLoader.LoadLayers(paths);
+        SelectedTab = 0;
+        WorkFolder = folder;
+        Watch(folder);
+    }
+
+    private void Watch(string folder)
+    {
+        _watcher?.Dispose();
+        _watcher = new FileSystemWatcher(folder, "*.png") { NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size, EnableRaisingEvents = true };
+        _reloadTimer ??= new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(700) };
+        _reloadTimer.Tick -= ReloadFromFolder;
+        _reloadTimer.Tick += ReloadFromFolder;
+        void Changed(object? s, FileSystemEventArgs e) => Application.Current?.Dispatcher.BeginInvoke(() => { _reloadTimer.Stop(); _reloadTimer.Start(); });
+        _watcher.Changed += Changed;
+        _watcher.Created += Changed;
+        _watcher.Renamed += (s, e) => Changed(s, e);
+    }
+
+    private void StopWatching()
+    {
+        _watcher?.Dispose();
+        _watcher = null;
+        WorkFolder = null;
+    }
+
+    private async void ReloadFromFolder(object? sender, EventArgs e)
+    {
+        _reloadTimer?.Stop();
+        if (WorkFolder is not { } folder || IsCompiling) return;
+        try
+        {
+            var files = Directory.GetFiles(folder, "*.png").Where(f => LayerNames.GuessFromFileName(f) != null).ToList();
+            if (files.Count == 0) return;
+            var art = ArtworkLoader.LoadLayers(ArtworkLoader.AssignLayers(files));
+            _undo.Clear();
+            _compile = null;
+            CompiledImage = null;
+            Artwork = art;
+            AppendLog("The images were saved – reloaded" + (AutoRebuild ? ", compiling …" : "."));
+            if (AutoRebuild && CompileCommand.CanExecute(null)) await CompileAsync(interactive: false);
+        }
+        catch (Exception ex) when (ex is IOException or ArtworkImportException or UnauthorizedAccessException)
+        {
+            // The paint program may still be writing: the next change event retries.
+            AppendLog("Could not read the images yet: " + ex.Message);
+        }
+    }
+
+    private static void OpenFolder(string folder)
+    {
+        try { System.Diagnostics.Process.Start("explorer.exe", $"\"{folder}\""); }
+        catch (System.ComponentModel.Win32Exception) { }
+    }
+
+    public ICommand EditExistingCommand { get; private set; } = null!;
+    public ICommand NewBlankCommand { get; private set; } = null!;
+    public ICommand OpenWorkFolderCommand { get; private set; } = null!;
+
     public void ImportFiles(IReadOnlyList<string> paths)
     {
         if (!_ctx.IsOpen) { Message("Please open a project folder first."); return; }
+        // A dropped folder (or a finished tileset's files) goes to the import of finished tilesets.
+        if (paths.Count == 1 && Directory.Exists(paths[0])) { ImportFinished(paths[0]); return; }
+        if (paths.Any(p => p.EndsWith(".bin", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".pal", StringComparison.OrdinalIgnoreCase)))
+        {
+            ImportFinished(Path.GetDirectoryName(paths[0]));
+            return;
+        }
         var pngs = paths.Where(p => p.EndsWith(".png", StringComparison.OrdinalIgnoreCase)).ToList();
         if (pngs.Count == 0) { Message("Please use PNG files."); return; }
         if (!ConfirmDiscard()) return;
@@ -350,6 +553,8 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
                     ExportPlanner.CheckCollisions(_ctx.Project, new DiskFileSource(_ctx.Project.Root), suggestion).Count == 0)
                     TilesetName = suggestion;
             }
+            StopWatching();
+            ReplaceTarget = null;
             Artwork = art;
             SelectedTab = 0;
             AppendLog($"Imported: {string.Join(", ", pngs.Select(Path.GetFileName))}");
@@ -526,11 +731,13 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
 
     // ---- Compile
 
-    private async Task CompileAsync()
+    private Task CompileAsync() => CompileAsync(interactive: true);
+
+    private async Task CompileAsync(bool interactive)
     {
         var p = _ctx.Project;
         if (p == null || Artwork == null || SelectedPrimary == null) return;
-        if (_preIssues.Any(i => i.Severity == IssueSeverity.Error) &&
+        if (interactive && _preIssues.Any(i => i.Severity == IssueSeverity.Error) &&
             MessageBox.Show(Owner, "The pre-check reports errors. Porytiles will likely fail, but it will provide its own diagnostics. Compile anyway?",
                 "Compile", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
@@ -608,7 +815,7 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
                 CompilerVersion = _compile.CompilerVersion?.Version ?? "?",
                 CompileTransparency = _compile.SandboxTransparency,
                 SourceArtwork = Artwork,
-            }, new ExportOptions { IncludeSources = IncludeSources });
+            }, new ExportOptions { IncludeSources = IncludeSources || IsReplacing, ReplaceExisting = IsReplacing });
         }
         catch (ExportValidationException ex)
         {

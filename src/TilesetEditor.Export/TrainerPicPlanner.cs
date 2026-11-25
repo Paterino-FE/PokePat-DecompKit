@@ -11,7 +11,11 @@ public sealed record TrainerPicResult(ExportPlan Plan, string Constant, Rgba32[]
 
 /// <summary>
 /// Registers a new trainer battle picture (TRAINER_PIC_X): 64×64 PNG with its own palette, the constant (raising
-/// TRAINER_PIC_COUNT), the INCBINs and the TRAINER_SPRITE entry – the same pattern as the branch's own custom pictures.
+/// TRAINER_PIC_COUNT), the graphics declarations and the table entry – the same pattern as the branch's own pictures:
+/// <list type="bullet">
+/// <item>up to expansion 1.12: #define + INCBIN + TRAINER_SPRITE(…) in gTrainerSprites</item>
+/// <item>expansion 1.13+: enumerator in enum TrainerPic + INCGFX + [TRAINER_PIC_X] = { .frontPic = TRAINER_FRONT_PIC(…) } in gTrainerPicInfo</item>
+/// </list>
 /// </summary>
 public static partial class TrainerPicPlanner
 {
@@ -52,8 +56,12 @@ public static partial class TrainerPicPlanner
         var png = Png.Load(pngPath);
         errors.AddRange(Check(png));
         var count = Regex.Match(consts, @"^([ \t]*#define[ \t]+TRAINER_PIC_COUNT[ \t]+)(\d+)", RegexOptions.Multiline);
-        if (!count.Success) errors.Add($"TRAINER_PIC_COUNT (#define) was not found in {CharacterGraphics.TrainerConstantsFile}.");
-        if (!gfx.Contains("gTrainerSprites[]", StringComparison.Ordinal)) errors.Add($"gTrainerSprites was not found in {CharacterGraphics.TrainerGraphicsFile}.");
+        var countEnum = Regex.Match(consts, @"^([ \t]*)TRAINER_PIC_COUNT[ \t]*,", RegexOptions.Multiline);
+        bool picInfo = CharacterGraphics.UsesPicInfo(gfx);
+        bool incGfx = GraphicsIncludes.UsesIncGfx(gfx);
+        if (!count.Success && !countEnum.Success) errors.Add($"TRAINER_PIC_COUNT (#define or enum) was not found in {CharacterGraphics.TrainerConstantsFile}.");
+        if (!picInfo && !gfx.Contains("gTrainerSprites[]", StringComparison.Ordinal))
+            errors.Add($"Neither gTrainerSprites nor gTrainerPicInfo was found in {CharacterGraphics.TrainerGraphicsFile}.");
         if (errors.Count > 0) throw new ExportValidationException(errors);
 
         // Image: own palette, index 0 transparent
@@ -73,34 +81,63 @@ public static partial class TrainerPicPlanner
         PlannedFile Modify(string rel, string text, string desc) =>
             new(rel, PlannedAction.Modify, new UTF8Encoding(false).GetBytes(text), desc, Hashing.Sha256(File.ReadAllBytes(ProjectPaths.Combine(root, rel))));
 
-        // Constant before TRAINER_PIC_COUNT, aligned like it; raise the count.
-        int id = int.Parse(count.Groups[2].Value);
-        int column = count.Groups[1].Value.TrimStart().Length;
-        string head = $"#define {constant}";
-        string line = (head.Length < column ? head.PadRight(column) : head + " ") + id + "\n";
-        int lineStart = consts.LastIndexOf('\n', count.Index) + 1;
-        consts = consts[..lineStart] + line + consts[lineStart..];
-        consts = Regex.Replace(consts, @"^([ \t]*#define[ \t]+TRAINER_PIC_COUNT[ \t]+)\d+", m => m.Groups[1].Value + (id + 1), RegexOptions.Multiline);
+        int id;
+        if (count.Success)
+        {
+            // Constant before TRAINER_PIC_COUNT, aligned like it; raise the count.
+            id = int.Parse(count.Groups[2].Value);
+            int column = count.Groups[1].Value.TrimStart().Length;
+            string head = $"#define {constant}";
+            string line = (head.Length < column ? head.PadRight(column) : head + " ") + id + "\n";
+            int lineStart = consts.LastIndexOf('\n', count.Index) + 1;
+            consts = consts[..lineStart] + line + consts[lineStart..];
+            consts = Regex.Replace(consts, @"^([ \t]*#define[ \t]+TRAINER_PIC_COUNT[ \t]+)\d+", m => m.Groups[1].Value + (id + 1), RegexOptions.Multiline);
+        }
+        else
+        {
+            // Enumerator directly before TRAINER_PIC_COUNT (which then grows by one by itself).
+            var defines = new CDefines();
+            defines.AddFromText(consts);
+            id = (int)(defines.TryEvaluate("TRAINER_PIC_COUNT") ?? throw new ExportValidationException(["The value of TRAINER_PIC_COUNT could not be determined."]));
+            consts = consts[..countEnum.Index] + countEnum.Groups[1].Value + constant + ",\n" + consts[countEnum.Index..];
+        }
         files.Add(Modify(CharacterGraphics.TrainerConstantsFile, consts, $"{constant} = {id}, TRAINER_PIC_COUNT {id} → {id + 1}"));
 
-        // INCBINs after the last front picture/palette pair, entry at the end of gTrainerSprites.
+        // Declarations after the last front picture/palette pair, in the file's style.
+        var decls = GraphicsIncludes.Declarations(gfx).ToList();
+        var lastFrontDecl = decls.LastOrDefault(d => d.Symbol.StartsWith("gTrainerFrontPic_", StringComparison.Ordinal))
+            ?? throw new ExportValidationException(["No gTrainerFrontPic_ declaration found."]);
         var lines = gfx.Split('\n').ToList();
-        int lastFront = lines.FindLastIndex(l => Regex.IsMatch(l, @"^const u32 gTrainerFrontPic_\w+\[\]"));
-        if (lastFront < 0) throw new ExportValidationException(["No gTrainerFrontPic_ INCBIN found."]);
-        int after = lastFront + 1 < lines.Count && lines[lastFront + 1].StartsWith("const u32 gTrainerPalette_", StringComparison.Ordinal) ? lastFront + 1 : lastFront;
-        lines.InsertRange(after + 1,
-        [
-            $"const u32 {frontSym}[] = INCBIN_U32(\"{FrontDir}/{file}.4bpp.lz\");",
-            $"const u32 {palSym}[] = INCBIN_U32(\"{PaletteDir}/{file}.gbapal.lz\");",
-        ]);
+        int lastFront = gfx[..lastFrontDecl.Index].Count(c => c == '\n');
+        int after = lastFront + 1 < lines.Count && Regex.IsMatch(lines[lastFront + 1], @"^const u(16|32) gTrainerPalette_") ? lastFront + 1 : lastFront;
+        string frontExt = lastFrontDecl.Include.OutputExtension;
+        lines.InsertRange(after + 1, incGfx
+            ?
+            [
+                $"const u32 {frontSym}[] = {GraphicsInclude.Format(true, 32, pngRel, frontExt.Length > 0 ? frontExt : ".4bpp.smol")};",
+                $"const u16 {palSym}[] = {GraphicsInclude.Format(true, 16, palRel, ".gbapal")};",
+            ]
+            :
+            [
+                $"const u32 {frontSym}[] = INCBIN_U32(\"{FrontDir}/{file}.4bpp.lz\");",
+                $"const u32 {palSym}[] = INCBIN_U32(\"{PaletteDir}/{file}.gbapal.lz\");",
+            ]);
         gfx = string.Join('\n', lines);
-        int arr = gfx.IndexOf("gTrainerSprites[]", StringComparison.Ordinal);
+        int arr = gfx.IndexOf(picInfo ? "gTrainerPicInfo[" : "gTrainerSprites[]", StringComparison.Ordinal);
         int open = gfx.IndexOf('{', arr);
         int close = gfx.IndexOf("\n};", open, StringComparison.Ordinal);
-        var segment = gfx[open..close];
-        segment = SpriteImportPlanner.InsertAfterLastTopLevel(segment, @"^\s*TRAINER_SPRITE\(", $"    TRAINER_SPRITE({constant}, {frontSym}, {palSym}),\n");
-        gfx = gfx[..open] + segment + gfx[close..];
-        files.Add(Modify(CharacterGraphics.TrainerGraphicsFile, gfx, $"INCBIN {frontSym}, {palSym} and TRAINER_SPRITE({constant})"));
+        if (picInfo)
+        {
+            gfx = gfx[..(close + 1)] + $"    [{constant}] =\n    {{\n        .frontPic = TRAINER_FRONT_PIC({frontSym}, {palSym}),\n    }},\n" + gfx[(close + 1)..];
+            files.Add(Modify(CharacterGraphics.TrainerGraphicsFile, gfx, $"{frontSym}, {palSym} and gTrainerPicInfo[{constant}]"));
+        }
+        else
+        {
+            var segment = gfx[open..close];
+            segment = SpriteImportPlanner.InsertAfterLastTopLevel(segment, @"^\s*TRAINER_SPRITE\(", $"    TRAINER_SPRITE({constant}, {frontSym}, {palSym}),\n");
+            gfx = gfx[..open] + segment + gfx[close..];
+            files.Add(Modify(CharacterGraphics.TrainerGraphicsFile, gfx, $"INCBIN {frontSym}, {palSym} and TRAINER_SPRITE({constant})"));
+        }
 
         var plan = ExportPlan.ForFiles(root, $"New trainer picture {constant}", FrontDir, files);
         plan.Notes.Add($"Afterwards {constant} can be chosen as \"Picture\" in the Trainers module.");

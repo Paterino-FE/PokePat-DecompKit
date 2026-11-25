@@ -32,8 +32,12 @@ public class MapCatalogTests
     [Fact]
     public void DetectsPoryscriptFiles()
     {
-        var catalog = MapCatalog.Load(ProjectLoader.Load(TestPaths.ReferenceProject));
-        Assert.Contains("data/maps/LittlerootTown/scripts.pory", catalog.Find("LittlerootTown")!.ScriptFiles);
+        // A Poryscript file next to scripts.inc (an overlay, so the reference project stays untouched).
+        var project = ProjectLoader.Load(TestPaths.ReferenceProject);
+        var fs = new OverlayFileSource(new DiskFileSource(project.Root), new Dictionary<string, string?>(), ["data/maps/LittlerootTown/scripts.pory"]);
+        var catalog = MapCatalog.Load(fs, project.Layouts);
+        Assert.Equal(["data/maps/LittlerootTown/scripts.pory", "data/maps/LittlerootTown/scripts.inc"], catalog.Find("LittlerootTown")!.ScriptFiles);
+        Assert.Equal(["data/maps/OldaleTown/scripts.inc"], catalog.Find("OldaleTown")!.ScriptFiles);
     }
 }
 
@@ -43,13 +47,13 @@ public class ConfigCatalogTests
     public void ReadsBranchConfiguration()
     {
         var options = ConfigCatalog.Load(TestPaths.ReferenceProject);
-        var signpost = Assert.Single(options, o => o.Name == "OW_AUTO_SIGNPOST");
-        Assert.Equal("FALSE", signpost.Value);
-        Assert.Equal(ConfigValueKind.Switch, signpost.Kind);
-        Assert.True(signpost.IsToggle);
-        Assert.Equal("include/config/overworld.h", signpost.File);
-        Assert.Contains("MB_SIGNPOST", signpost.Description);
-        Assert.Equal("Movement config", signpost.Section);
+        var approach = Assert.Single(options, o => o.Name == "OW_DOUBLE_APPROACH_WITH_ONE_MON");
+        Assert.Equal("FALSE", approach.Value);
+        Assert.Equal(ConfigValueKind.Switch, approach.Kind);
+        Assert.True(approach.IsToggle);
+        Assert.Equal("include/config/overworld.h", approach.File);
+        Assert.Contains("two trainers", approach.Description);
+        Assert.Equal("Other settings", approach.Section);
 
         Assert.Equal(ConfigValueKind.Generation, options.First(o => o.Name == "OW_RUNNING_INDOORS").Kind);
         Assert.Equal(25, options.First(o => o.Name == "OW_BERRY_MUTATION_CHANCE").Resolved);
@@ -113,9 +117,9 @@ public class ConfigEditorTests
     public void WorksOnTheBranchConfig()
     {
         var file = Path.Combine(TestPaths.ReferenceProject, "include", "config", "overworld.h");
-        var opt = ConfigCatalog.Load(TestPaths.ReferenceProject).Single(o => o.Name == "OW_AUTO_SIGNPOST");
+        var opt = ConfigCatalog.Load(TestPaths.ReferenceProject).Single(o => o.Name == "OW_DOUBLE_APPROACH_WITH_ONE_MON");
         var changed = ConfigEditor.Apply(File.ReadAllText(file), [new ConfigChange(opt.Name, opt.Line, opt.Value, "TRUE")]);
-        var reparsed = ConfigCatalog.Parse([("include/config/overworld.h", changed)]).Single(o => o.Name == "OW_AUTO_SIGNPOST");
+        var reparsed = ConfigCatalog.Parse([("include/config/overworld.h", changed)]).Single(o => o.Name == "OW_DOUBLE_APPROACH_WITH_ONE_MON");
         Assert.Equal("TRUE", reparsed.Value);
         Assert.Equal(opt.Description, reparsed.Description);
         Assert.Equal(File.ReadAllText(file).Split('\n').Length, changed.Split('\n').Length);
@@ -148,6 +152,29 @@ public class PorymapBridgeTests
         PorymapBridgeInstaller.Apply(PorymapBridgeInstaller.PlanUninstall(root, scriptPath));
         Assert.False(PorymapBridgeInstaller.IsInstalled(root, scriptPath));
         Assert.Contains("custom_scripts=other.js:1,disabled.js:0\r\n", File.ReadAllText(cfg));
+    }
+
+    [Fact]
+    public void OpenProject_PointsPorymapAtTheProjectAndMap()
+    {
+        var dir = TestPaths.NewTempDir("porymap");
+        var global = Path.Combine(dir, "pret", "porymap", "porymap.cfg");
+        Directory.CreateDirectory(Path.GetDirectoryName(global)!);
+        File.WriteAllText(global, "check_for_updates=1\r\nrecent_project=C:/old/project\r\nreopen_on_launch=0\r\n");
+        var project = Path.Combine(dir, "my hack");
+        Directory.CreateDirectory(project);
+        File.WriteAllText(Path.Combine(project, "porymap.user.cfg"), "custom_scripts=a.js:1\n");
+
+        var changed = PorymapLauncher.PrepareProject(project, "Route101", global);
+        Assert.Equal(3, changed.Count);
+        var g = File.ReadAllText(global);
+        Assert.Equal($"check_for_updates=1\r\nrecent_project={PorymapLauncher.ToPorymapPath(project)}\r\nreopen_on_launch=1\r\nproject_manually_closed=0\r\n", g);
+        Assert.Equal("custom_scripts=a.js:1\nrecent_map_or_layout=Route101\n", File.ReadAllText(Path.Combine(project, "porymap.user.cfg")));
+        Assert.Equal("base_game_version=pokeemerald\n", File.ReadAllText(Path.Combine(project, "porymap.project.cfg")));
+        Assert.Contains("recent_project=C:/old/project", File.ReadAllText(global + ".toolkit-backup"));
+        // Nothing to do the second time; an existing porymap.project.cfg is never touched.
+        Assert.Empty(PorymapLauncher.PrepareProject(project, "Route101", global));
+        Assert.DoesNotContain('\\', PorymapLauncher.ToPorymapPath(project));
     }
 
     [Fact]
@@ -200,7 +227,7 @@ public class PorymapBridgeTests
     /// Runs the real bridge script with stand-ins for Porymap's "utility" and "map" objects in the Windows script
     /// host (JScript). Porymap's engine supports modules, JScript does not, so only the "export" keyword is removed.
     /// </summary>
-    [Fact]
+    [WindowsFact]
     public void BridgeScript_RunsAndProducesParsableMessages()
     {
         var js = new StringBuilder();

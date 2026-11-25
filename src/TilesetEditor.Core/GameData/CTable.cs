@@ -458,10 +458,10 @@ public static class CTable
     }
 }
 
-/// <summary>Game text in C: _("…") and COMPOUND_STRING("…" "…").</summary>
+/// <summary>Game text in C: _("…"), COMPOUND_STRING("…" "…") and name macros like ITEM_NAME("…") (expansion 1.13+).</summary>
 public static partial class CString
 {
-    [GeneratedRegex(@"^(_|COMPOUND_STRING)[ \t]*\(\s*((?:""(?:[^""\\\r\n]|\\.)*""\s*)+)\)$", RegexOptions.Singleline)]
+    [GeneratedRegex(@"^(_|COMPOUND_STRING|[A-Z][A-Z0-9]*_NAME)[ \t]*\(\s*((?:""(?:[^""\\\r\n]|\\.)*""\s*)+)\)$", RegexOptions.Singleline)]
     private static partial Regex StringValue();
 
     [GeneratedRegex(@"""((?:[^""\\\r\n]|\\.)*)""")]

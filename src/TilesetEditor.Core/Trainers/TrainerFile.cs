@@ -429,8 +429,6 @@ public static partial class TrainerFile
     [GeneratedRegex(@"^[ \t]*#define[ \t]+(TRAINER_\w+)([ \t]+)(\d+)[ \t]*(?://.*)?$", RegexOptions.Multiline)]
     private static partial Regex TrainerDefine();
 
-    [GeneratedRegex(@"^([ \t]*#define[ \t]+(?:TRAINERS_COUNT|MAX_TRAINERS_COUNT)[ \t]+)(\d+)", RegexOptions.Multiline)]
-    private static partial Regex CountDefine();
 
     public sealed record IdSlot(int Id, bool RaisesCount, string? Problem);
 
@@ -438,12 +436,13 @@ public static partial class TrainerFile
     public static IdSlot FindFreeId(string opponents, IReadOnlyCollection<string> trainersInFile)
     {
         var used = TrainerDefine().Matches(opponents).Select(m => int.Parse(m.Groups[3].Value)).ToHashSet();
-        var counts = CountDefine().Matches(opponents).ToDictionary(m => m.Value.Contains("MAX_TRAINERS_COUNT") ? "max" : "count", m => int.Parse(m.Groups[2].Value));
-        if (!counts.TryGetValue("count", out int count)) return new IdSlot(0, false, "TRAINERS_COUNT was not found in " + OpponentsFile + ".");
+        var countDefine = NumericDefine(opponents, "TRAINERS_COUNT");
+        if (countDefine == null) return new IdSlot(0, false, "TRAINERS_COUNT was not found in " + OpponentsFile + ".");
+        int count = int.Parse(countDefine.Groups[2].Value);
         for (int id = 1; id < count; id++) if (!used.Contains(id)) return new IdSlot(id, false, null);
-        int max = counts.GetValueOrDefault("max", int.MaxValue);
+        int max = NumericDefine(opponents, "MAX_TRAINERS_COUNT") is { } maxDefine ? int.Parse(maxDefine.Groups[2].Value) : int.MaxValue;
         if (count >= max)
-            return new IdSlot(0, false, $"All {max} trainer slots are in use (MAX_TRAINERS_COUNT). Raising it needs more trainer flags in the save block – see the note in {OpponentsFile}.");
+            return new IdSlot(0, false, $"All {max} trainer slots are in use (MAX_TRAINERS_COUNT). \"More trainer slots…\" raises the limit (old save files stop working).");
         return new IdSlot(count, true, null);
     }
 
@@ -465,9 +464,50 @@ public static partial class TrainerFile
         var result = opponents[..insertAt] + line + nl + opponents[insertAt..];
         if (slot.RaisesCount)
         {
-            var m = CountDefine().Matches(result).First(x => !x.Value.Contains("MAX_TRAINERS_COUNT"));
+            var m = NumericDefine(result, "TRAINERS_COUNT") ?? throw new InvalidOperationException("TRAINERS_COUNT was not found in " + OpponentsFile + ".");
             result = result[..m.Groups[2].Index] + (slot.Id + 1) + result[(m.Groups[2].Index + m.Groups[2].Length)..];
         }
         return result;
+    }
+
+    [GeneratedRegex(@"^([ \t]*#define[ \t]+(\w+)[ \t]+)(\w+)[ \t]*(?://[^\n]*)?\r?$", RegexOptions.Multiline)]
+    private static partial Regex AnyDefine();
+
+    /// <summary>MAX_TRAINERS_COUNT (the number behind it, e.g. MAX_TRAINERS_COUNT_EMERALD in expansion 1.13+), or null.</summary>
+    public static int? MaxTrainers(string opponents) => NumericDefine(opponents, "MAX_TRAINERS_COUNT") is { } m ? int.Parse(m.Groups[2].Value) : null;
+
+    /// <summary>
+    /// Raises MAX_TRAINERS_COUNT by <paramref name="by"/> (rounded up to a multiple of 8 so the flag bytes stay whole). Every
+    /// trainer has a "defeated" flag right after TRAINER_FLAGS_START, and the system and daily flags follow relative to it,
+    /// so they move along and FLAGS_COUNT grows: the save block gets by/8 bytes bigger and old save files no longer match.
+    /// </summary>
+    public static (string Text, int OldMax, int NewMax) RaiseMaxTrainers(string opponents, int by)
+    {
+        var m = NumericDefine(opponents, "MAX_TRAINERS_COUNT") ?? throw new InvalidOperationException($"MAX_TRAINERS_COUNT was not found in {OpponentsFile}.");
+        int old = int.Parse(m.Groups[2].Value);
+        int add = (by + 7) / 8 * 8;
+        int now = old + add;
+        return (opponents[..m.Groups[2].Index] + now + opponents[(m.Groups[2].Index + m.Groups[2].Length)..], old, now);
+    }
+
+    [GeneratedRegex(@"\G([ \t]*#define[ \t]+\w+[ \t]+)(\d+)")]
+    private static partial Regex NumberAt();
+
+    /// <summary>
+    /// The "#define NAME number" line that <paramref name="name"/> stands for (group 2 = the number). expansion 1.13+ writes
+    /// "#define TRAINERS_COUNT TRAINERS_COUNT_EMERALD" inside "#if IS_FRLG … #else" with "#define TRAINERS_COUNT_EMERALD 855"
+    /// further up: aliases are followed, and of several definitions the first one that leads to a number is used.
+    /// </summary>
+    private static Match? NumericDefine(string text, string name, int depth = 0)
+    {
+        if (depth > 8) return null;
+        foreach (Match m in AnyDefine().Matches(text))
+        {
+            if (m.Groups[2].Value != name) continue;
+            var value = m.Groups[3].Value;
+            if (Regex.IsMatch(value, @"^\d+$")) return NumberAt().Match(text, m.Index); // group 2 = the number
+            if (NumericDefine(text, value, depth + 1) is { } target) return target;
+        }
+        return null;
     }
 }

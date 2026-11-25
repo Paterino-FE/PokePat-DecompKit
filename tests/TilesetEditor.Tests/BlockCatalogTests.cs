@@ -11,7 +11,7 @@ public class BlockCatalogTests
     private static ToolkitEvent AllBlocks()
     {
         var ev = new ToolkitEvent { Label = "Route101_TK_AllBlocks", Map = "Route101", Title = "All" };
-        foreach (var def in BlockCatalog.All)
+        foreach (var def in BlockCatalog.All.Where(d => d.RequiresMod == null)) // mod blocks need the mod installed
         {
             var step = CommandStep.Create(def);
             if (def.Id == BlockCatalog.MacroBlockId) { step.Args["command"] = "setflag"; step.Args["arg0"] = "FLAG_UNUSED_0x021"; }
@@ -201,7 +201,7 @@ public class BlockCatalogIntegrationTests
         var root = TestPaths.TestCheckout;
         if (!Directory.Exists(root)) root = EventFixtures.Root;
         var ev = new ToolkitEvent { Label = "Route101_TK_AllBlocksTest", Map = "Route101" };
-        foreach (var def in BlockCatalog.All)
+        foreach (var def in BlockCatalog.All.Where(d => d.RequiresMod == null)) // mod blocks need the mod installed
         {
             var step = CommandStep.Create(def);
             if (def.Id == BlockCatalog.MacroBlockId) step.Args["command"] = "nop";

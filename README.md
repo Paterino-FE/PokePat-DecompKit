@@ -11,9 +11,9 @@ every change shows the list of files first, makes a backup and is rolled back co
 | Module | What it does |
 |---|---|
 | **Project** | Opens your project, shows branch/version, tool paths, Porymap bridge |
-| **Tilesets** | PNG → checks → Porytiles → preview in GBA colors → new secondary tileset |
+| **Tilesets** | PNG → checks → Porytiles → preview in GBA colors → new secondary tileset; edit existing tilesets as images (round trip with your paint program); import finished tilesets (asset repos) and put them on maps |
 | **Maps** | Maps, layouts, tilesets, scripts, connections (read only) |
-| **Dialogs & Events** | Event builder with building blocks (messages, choices, items, battles, movements, scenes …), dialog preview, movement paths on the map, existing scripts in readable form |
+| **Dialogs & Events** | Every existing person, sign and text of the game (searchable, rendered like in game, usable as template); event builder with building blocks (messages, choices, items, battles, movements, scenes …), dialog preview, movement paths on the map, existing scripts in readable form |
 | **Flags & Variables** | Every flag/variable with its uses, name free ones, add more |
 | **Trainers** | Trainer teams (`trainers.h` or `trainers.party`), create trainers |
 | **Game data** | Trainer classes, items, moves, abilities, Pokémon, types, natures, location names |
@@ -22,6 +22,7 @@ every change shows the list of files first, makes a backup and is rolled back co
 | **Graphics** | Title screen, menus, windows, battle backgrounds … view and replace |
 | **Features** | `include/config` options by category |
 | **Build ROM** | Runs `make` (in WSL on Windows), shows the output, opens the emulator |
+| **Mods** | Installs extensions into your game (checked first, shown as a file list, removable again) – e.g. *Dialog portraits* |
 
 Detailed documentation of every module: [docs/README.md](docs/README.md) (German).
 
@@ -58,15 +59,28 @@ downloaded zip if your network blocks downloads.
 
 1. Download and unzip `PokePat-DecompKit-<version>-windows-x64.zip` to a local folder (not to a `\\wsl.localhost` share –
    Windows may refuse to start programs from there).
-2. Start `PokePatDecompKit.exe`. On the first start the **setup** asks for:
-   1. **your pokeemerald-expansion project folder – required.** It is checked right away (Makefile, constants, maps).
-   2. how the ROM is built: WSL (distribution, e.g. `Ubuntu`) or Windows cmd, and the build command (default `make -j$(nproc)`);
-   3. Porymap – optional, *Skip* to leave it out;
-   4. an emulator – optional;
-   5. Porytiles – optional (run `tools\setup-porytiles.ps1` first if you want to import tilesets).
+2. Start `PokePatDecompKit.exe`. On the first start **Get started** opens. Check the two folders (your game inside
+   WSL, default `~/pokeemerald-expansion`; the programs folder, default `%LOCALAPPDATA%\PokePat\tools`) and click
+   **Install everything**. PokéPat sets up only what is missing:
 
-   Everything except the project folder can be skipped and set later with **Setup…** in the top bar or in the
-   Project module.
+   | Part | What happens |
+   |---|---|
+   | WSL with Ubuntu | `wsl --install -d Ubuntu` (asks for admin rights; Ubuntu then asks for a user name and password once, sometimes Windows wants a restart) |
+   | Build tools | a console window runs `sudo apt-get install build-essential binutils-arm-none-eabi gcc-arm-none-eabi libnewlib-arm-none-eabi libpng-dev git python3` – enter your Linux password there |
+   | pokeemerald-expansion | `git clone` of the latest release into your folder, on a new branch `pokepat` |
+   | Poryscript | latest release into `tools/poryscript/`, plus the Makefile rules so `.pory` files are compiled during the build |
+   | Porytiles 2.0.0 | the pinned release (SHA-256 checked) into WSL |
+   | Porymap, mGBA | latest Windows releases into the programs folder |
+
+   Every part can also be installed on its own; existing parts are kept. **Open my project** stores everything and
+   opens the project. Already have a project and tools? Click **I already have a project – set paths manually…**
+   (project folder required, everything else optional). Both are available later under **Setup…** in the top bar.
+
+   **Updates:** *Check for updates* in the same window shows for every part whether a newer release exists and updates
+   Porymap, mGBA and Poryscript with one click. pokeemerald-expansion is updated by merging the new release into your
+   branch – only when all your changes are committed, and if the release touches the same lines as your changes the
+   merge is undone completely, so nothing is left half-done. Porytiles stays pinned on purpose. With *Check for updates
+   when PokéPat starts* (on by default, at most once a day) a notice appears at the top when something is new.
 3. Settings are stored in `%APPDATA%\TilesetEditor\settings.json`.
 
 ## Linux
@@ -75,11 +89,15 @@ downloaded zip if your network blocks downloads.
 tar xzf PokePat-DecompKit-<version>-linux-x64.tar.gz
 cd PokePat-DecompKit-<version>-linux-x64
 chmod +x decompkit tools/setup-porytiles.sh
-./decompkit setup          # asks for the project folder (required) and the optional tools
+./decompkit install        # get started: installs pokeemerald-expansion, Poryscript and Porytiles (--check only checks)
+./decompkit setup          # or: use an existing project and set the tool paths yourself
 ./decompkit info           # shows what was detected in your project
 ./decompkit build          # builds the ROM with your build command
 ```
 
+`install` takes `--project-path <folder>` (default `~/pokeemerald-expansion`), `--tag expansion/<version>` and
+`--only buildtools,poryscript,…`; `install --updates` lists new versions, `install --update porymap,expansion` updates
+those parts; the build tools are installed with `sudo apt-get` in your terminal.
 `setup` asks the same questions as the Windows setup; press Enter to keep a suggested value or type `-` to skip an
 optional tool. It can also run without questions:
 `./decompkit setup --project ~/my-hack --porymap /usr/bin/porymap --emulator mgba-qt --yes`.
@@ -117,9 +135,27 @@ Requirements: [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (th
 |---|---|---|
 | Build + unit tests + local install | `pwsh -File build.ps1` (`-IntegrationTests` also runs Porytiles/WSL tests) | `./build.sh` (command line tool only) |
 | Release packages → `dist\` | `pwsh -File release.ps1` | – (build the Linux package on Windows with `release.ps1`) |
+| Windows app from Linux/WSL (cross-compile) | – | `./dev-build.sh` → unpacked app in `testbuild/`; `--release` also writes both packages to `release/`; `--tests` runs the unit tests first |
 
 The tests read a real project. Copy `test-paths.example.txt` to `test-paths.local.txt` (not committed) and point it at
-a pokeemerald-expansion based checkout, or set the environment variables named there.
+a pokeemerald-expansion based checkout, or set the environment variables named there. They are written against plain
+upstream releases and pass with **1.10.2** and **1.17.2**; run them against both when you change a parser.
+
+### Supported pokeemerald-expansion versions
+
+Tested with 1.10.2 and 1.17.2 (the ROM builds after every kind of change the kit makes). Newer releases changed the
+file formats; the kit reads and writes both styles and follows whatever the project already uses:
+
+| Since | Change | What the kit does |
+|---|---|---|
+| 1.12 | `region_map_sections.json` uses `"id"` instead of `"map_section"` | reads both |
+| 1.13 | graphics declared with `INCGFX_U32("x.png", ".4bpp.smol", "-mwidth 2")` instead of `INCBIN_U32("x.4bpp.lz")` | reads both; new tilesets, sprites, trainer pictures and icons are written in the project's style (sprites carry `-mwidth/-mheight` instead of a make rule) |
+| 1.13 | trainer classes, trainer pictures, object event graphics, items … are `enum`s | evaluates enums; new entries become enumerators before `…_COUNT` |
+| 1.13 | trainer pictures in `gTrainerPicInfo[]` (`TRAINER_FRONT_PIC(…)`) instead of `gTrainerSprites[]` | both |
+| 1.13 | `ITEM_NAME("…")` for item names | editable like `_("…")` |
+| 1.13 | trainers only in `trainers.party`; `trainers.h` is generated by the build | never edits the generated file |
+| 1.13 | FRLG fields in `global.fieldmap.h`, counts behind `#if IS_FRLG` | Porytiles sandbox gets `src/fieldmap.c`; Emerald values are used |
+| 1.16 | decorations keep description and icon in `header.h` (`description.h`, `icon.h` removed) | edits them in place |
 
 ```
 src/TilesetEditor.Core      images, palettes, project parsing, events, trainers, flags, game data, maps, sprites

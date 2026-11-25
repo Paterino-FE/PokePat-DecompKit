@@ -68,7 +68,9 @@ public sealed record RegistrationStyle(
     int PaletteIncbinCount,
     string TilesOutputExtension,
     string PalettesOutputExtension,
-    int AttributeDeclarationBits);
+    int AttributeDeclarationBits,
+    /// <summary>graphics.h declares with INCGFX_U32("tiles.png", ".4bpp.smol") (expansion 1.13+) instead of INCBIN.</summary>
+    bool UsesIncGfx = false);
 
 /// <summary>Everything the app needs to know about the target decomp project.</summary>
 public sealed class ProjectInfo

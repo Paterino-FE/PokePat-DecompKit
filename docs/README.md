@@ -322,6 +322,15 @@ src/TilesetEditor.Cli       Kommandozeile
 tests/                      Unit-, Export-, Build- und Integrationstests; tests/assets mit Test-PNGs und Porytiles-Logs
 ```
 
+## Unterstützte Expansion-Versionen
+
+Getestet mit pokeemerald-expansion **1.10.2** und **1.17.2** (alle Unit- und Integrationstests laufen gegen beide; mit
+1.17.2 wurde nach Tileset-Export, neuem Sprite, Trainerbild, Dekoration, Game-Data-, Trainer-, Flag- und Event-Änderungen
+erfolgreich ein ROM gebaut). Seit 1.13 haben sich mehrere Dateiformate geändert (`INCGFX` statt `INCBIN`, Konstanten als
+`enum`, `gTrainerPicInfo`, `ITEM_NAME`, Dekorationstexte direkt in `header.h` …). Das Kit liest beide Varianten und schreibt
+immer im Stil, den das Projekt bereits verwendet. Die Übersicht der Unterschiede steht im englischen README
+(„Supported pokeemerald-expansion versions“).
+
 ## Abgeleitete Regeln für dieses Projekt (pokemerald-reyamon, Branch main)
 
 - pokeemerald-expansion 1.10.2; `NUM_TILES_PER_METATILE 8` → Dual-Layer.

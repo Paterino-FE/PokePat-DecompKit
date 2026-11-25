@@ -16,6 +16,11 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += (_, a) => LogCrash("AppDomain", a.ExceptionObject as Exception);
         TaskScheduler.UnobservedTaskException += (_, a) => { LogCrash("Task", a.Exception); a.SetObserved(); };
 
+        // Theme before the first window, so it never flashes in the wrong colors.
+        // --theme light|dark overrides the saved choice (screenshots, testing).
+        int themeAt = Array.IndexOf(e.Args, "--theme");
+        var theme = themeAt >= 0 && themeAt + 1 < e.Args.Length ? e.Args[themeAt + 1] : new Toolkit.ToolkitSettingsStore().Load().Theme;
+        Infrastructure.ThemeManager.Initialize(Infrastructure.ThemeManager.Parse(theme));
         var window = new MainWindow();
         MainWindow = window;
         int shotsAt = Array.IndexOf(e.Args, "--screenshots");
@@ -37,13 +42,14 @@ public partial class App : Application
         string? project = null;
         for (int i = 0; i < e.Args.Length; i++)
         {
-            if (e.Args[i] == "--screenshots") { i++; continue; }
+            if (e.Args[i] is "--screenshots" or "--theme") { i++; continue; }
             if (e.Args[i] == "--import" && i + 1 < e.Args.Length) imports.Add(e.Args[++i]);
             else project ??= e.Args[i];
         }
         if (project != null) window.ViewModel.OpenProject(project);
         else if (window.ViewModel.NeedsSetup) window.Dispatcher.BeginInvoke(window.ViewModel.RunSetup, DispatcherPriority.ApplicationIdle);
         if (imports.Count > 0) window.ViewModel.ImportIntoTilesetEditor(imports);
+        if (shotsDir == null) window.Dispatcher.BeginInvoke(window.ViewModel.CheckUpdatesInBackground, DispatcherPriority.ApplicationIdle);
         if (shotsDir != null) _ = TakeScreenshotsAsync(window, shotsDir);
     }
 
@@ -56,18 +62,40 @@ public partial class App : Application
         {
             window.ViewModel.SelectedModule = module;
             await Task.Delay(3500);
-            window.UpdateLayout();
-            var content = (FrameworkElement)window.Content;
-            var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap((int)content.ActualWidth, (int)content.ActualHeight, 96, 96,
-                System.Windows.Media.PixelFormats.Pbgra32);
-            bmp.Render(content);
-            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
-            enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
             var name = new string(module.Title.Where(char.IsLetterOrDigit).ToArray());
-            using var fs = File.Create(Path.Combine(dir, $"{window.ViewModel.Modules.IndexOf(module):00}-{name}.png"));
-            enc.Save(fs);
+            Render(window, Path.Combine(dir, $"{window.ViewModel.Modules.IndexOf(module):00}-{name}.png"));
         }
+        // The Get started window with the real checks of this PC.
+        var start = new Shell.GetStartedWindow(window.ViewModel.Context.Settings, check: false)
+        {
+            Owner = window, WindowStartupLocation = WindowStartupLocation.Manual, Left = -20000, Top = -20000,
+            ShowActivated = false, ShowInTaskbar = false,
+        };
+        start.Show();
+        await start.ViewModel.LoadAsync();
+        await start.ViewModel.CheckUpdatesAsync();
+        await Task.Delay(1500);
+        Render(start, Path.Combine(dir, "99-GetStarted.png"));
+        start.Close();
         Shutdown();
+    }
+
+    private static void Render(Window window, string file)
+    {
+        window.UpdateLayout();
+        var content = (FrameworkElement)window.Content;
+        var m = content.Margin;
+        double w = content.ActualWidth + m.Left + m.Right, h = content.ActualHeight + m.Top + m.Bottom;
+        var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap((int)w, (int)h, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        // The window's background is not part of its content: draw it first, as on screen.
+        var backdrop = new System.Windows.Media.DrawingVisual();
+        using (var dc = backdrop.RenderOpen()) dc.DrawRectangle(window.Background, null, new Rect(0, 0, w, h));
+        bmp.Render(backdrop);
+        bmp.Render(content);
+        var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+        using var fs = File.Create(file);
+        enc.Save(fs);
     }
 
     private static void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)

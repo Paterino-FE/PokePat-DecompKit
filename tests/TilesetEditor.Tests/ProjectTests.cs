@@ -14,12 +14,16 @@ public class ProjectTests
         Assert.Equal(2, p.Attributes.SizeBytes);
         Assert.Equal(0x00FFu, p.Attributes.BehaviorMask);
         Assert.Equal(0xF000u, p.Attributes.LayerTypeMask);
-        Assert.Equal("1.10.2", p.ExpansionVersion);
-        Assert.Equal(["gTileset_General", "gTileset_Building", "gTileset_SecretBase"], p.PrimaryTilesets.Select(t => t.Name));
+        Assert.Matches(@"^1\.\d+\.\d+$", p.ExpansionVersion); // tested with 1.10.2 and 1.17.2
+        // Emerald's three primaries (expansion 1.13+ adds the FRLG ones and lists them in another order).
+        Assert.Subset(p.PrimaryTilesets.Select(t => t.Name).ToHashSet(), new HashSet<string> { "gTileset_General", "gTileset_Building", "gTileset_SecretBase" });
+        Assert.All(p.PrimaryTilesets, t => Assert.True(t.IsFullyResolved, t.Name));
         Assert.True(p.Style.HeadersHaveIsCompressed);
         Assert.True(p.Style.HeadersHaveCallback);
         Assert.Equal(16, p.Style.PaletteIncbinCount);
-        Assert.Equal(".4bpp.lz", p.Style.TilesOutputExtension);
+        // What the existing secondaries use: tiles.4bpp.lz (INCBIN) or INCGFX(".png", ".4bpp.fastSmol") in expansion 1.13+.
+        Assert.Equal(p.Style.UsesIncGfx ? ".4bpp.fastSmol" : ".4bpp.lz", p.Style.TilesOutputExtension);
+        Assert.Equal(".gbapal", p.Style.PalettesOutputExtension);
         Assert.Empty(p.Warnings);
     }
 

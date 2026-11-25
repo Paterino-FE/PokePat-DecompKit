@@ -31,7 +31,7 @@ public partial class MapScriptsWindow : Window
     private ProjectInfo? _project;
     private readonly MapScriptReader.Result _result;
 
-    public MapScriptsWindow(string root, string map, ProjectInfo? project = null)
+    public MapScriptsWindow(string root, string map, ProjectInfo? project = null, string? select = null)
     {
         InitializeComponent();
         _root = root;
@@ -42,7 +42,7 @@ public partial class MapScriptsWindow : Window
         Header.Text = $"{map}  ·  {_result.File}  ·  {_result.Labels.Count(l => l.Kind == ScriptLabelKind.Script)} scripts, " +
                       $"{_result.Labels.Count(l => l.Kind == ScriptLabelKind.Movement)} movements, {_result.Labels.Count(l => l.Kind == ScriptLabelKind.Text)} texts";
         if (_result.Note != null) Note.Text = _result.Note + "  " + Note.Text;
-        Fill();
+        Fill(select);
     }
 
     private void Fill(string? select = null)

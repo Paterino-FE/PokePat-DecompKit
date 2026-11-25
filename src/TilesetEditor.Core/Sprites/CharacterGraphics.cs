@@ -22,17 +22,31 @@ public static partial class CharacterGraphics
     public const string TrainerConstantsFile = "include/constants/trainers.h";
     public const string TrainerGraphicsFile = "src/data/graphics/trainers.h";
 
-    [GeneratedRegex(@"^\s*#define\s+(TRAINER_PIC_\w+)\s+(\d+)", RegexOptions.Multiline)]
-    private static partial Regex PicDefine();
-
+    // Up to expansion 1.12: gTrainerSprites[] = { TRAINER_SPRITE(TRAINER_PIC_X, gTrainerFrontPic_X, gTrainerPalette_X), … }
     [GeneratedRegex(@"TRAINER_SPRITE\(\s*(TRAINER_PIC_\w+)\s*,\s*(\w+)\s*,\s*(\w+)")]
     private static partial Regex SpriteEntry();
 
-    [GeneratedRegex(@"(\w+)\[\]\s*=\s*INCBIN_U(?:8|16|32)\(""([^""]+)""")]
-    private static partial Regex Incbin();
+    // expansion 1.13+: gTrainerPicInfo[] = { [TRAINER_PIC_X] = { .frontPic = TRAINER_FRONT_PIC(gTrainerFrontPic_X, gTrainerPalette_X), … }, … }
+    [GeneratedRegex(@"\[\s*(TRAINER_PIC_\w+)\s*\]\s*=\s*\{\s*\.frontPic\s*=\s*TRAINER_FRONT_PIC\(\s*(\w+)\s*,\s*(\w+)")]
+    private static partial Regex PicInfoEntry();
 
-    private static string? PngOf(string bin) => bin.Contains(".4bpp") ? Regex.Replace(bin, @"\.4bpp(\.lz|\.smol)?$", ".png") : null;
-    private static string? PalOf(string bin) => Regex.Replace(bin, @"\.gbapal(\.lz)?$", ".pal");
+    /// <summary>True if the project lists trainer pictures in gTrainerPicInfo (expansion 1.13+) instead of gTrainerSprites.</summary>
+    public static bool UsesPicInfo(string graphicsText) => graphicsText.Contains("gTrainerPicInfo[", StringComparison.Ordinal);
+
+    /// <summary>TRAINER_PIC_X constants with their values, from #defines or enum TrainerPic (expansion 1.13+); without _COUNT.</summary>
+    public static List<(string Name, int Value)> TrainerPicConstants(string constantsText)
+    {
+        var defines = new Project.CDefines();
+        defines.AddFromText(constantsText);
+        var names = Regex.Matches(constantsText, @"^\s*#define\s+(TRAINER_PIC_\w+)\s+\S", RegexOptions.Multiline).Select(m => m.Groups[1].Value)
+            .Concat(Project.CDefines.Enumerators(Project.ProjectLoader.StripComments(constantsText)).Select(e => e.Name).Where(n => n.StartsWith("TRAINER_PIC_", StringComparison.Ordinal)))
+            .Where(n => !n.EndsWith("_COUNT", StringComparison.Ordinal))
+            .Distinct();
+        var result = new List<(string, int)>();
+        foreach (var n in names)
+            if (defines.TryEvaluate(n) is { } v) result.Add((n, (int)v));
+        return result;
+    }
 
     public static List<TrainerPic> TrainerPics(string root)
     {
@@ -42,18 +56,17 @@ public static partial class CharacterGraphics
             return File.Exists(p) ? File.ReadAllText(p) : "";
         }
         var gfx = Read(TrainerGraphicsFile);
-        var bins = Incbin().Matches(gfx).GroupBy(m => m.Groups[1].Value).ToDictionary(g => g.Key, g => g.First().Groups[2].Value);
-        var entries = SpriteEntry().Matches(gfx).GroupBy(m => m.Groups[1].Value).ToDictionary(g => g.Key, g => (Front: g.First().Groups[2].Value, Pal: g.First().Groups[3].Value));
+        var includes = Project.GraphicsIncludes.BySymbol(gfx);
+        var entries = SpriteEntry().Matches(gfx).Concat(PicInfoEntry().Matches(gfx))
+            .GroupBy(m => m.Groups[1].Value).ToDictionary(g => g.Key, g => (Front: g.First().Groups[2].Value, Pal: g.First().Groups[3].Value));
         var result = new List<TrainerPic>();
-        foreach (Match m in PicDefine().Matches(Read(TrainerConstantsFile)))
+        foreach (var (name, id) in TrainerPicConstants(Read(TrainerConstantsFile)))
         {
-            var name = m.Groups[1].Value;
-            if (name.EndsWith("_COUNT", StringComparison.Ordinal)) continue;
             entries.TryGetValue(name, out var e);
-            string? png = e.Front != null && bins.TryGetValue(e.Front, out var fb) ? PngOf(fb) : null;
-            string? pal = e.Pal != null && bins.TryGetValue(e.Pal, out var pb) ? PalOf(pb) : null;
+            string? png = e.Front != null && includes.TryGetValue(e.Front, out var fi) && fi.SourcePath.EndsWith(".png", StringComparison.Ordinal) ? fi.SourcePath : null;
+            string? pal = e.Pal != null && includes.TryGetValue(e.Pal, out var pi) && pi.SourcePath.EndsWith(".pal", StringComparison.Ordinal) ? pi.SourcePath : null;
             if (pal != null && !File.Exists(Path.Combine(root, pal.Replace('/', Path.DirectorySeparatorChar)))) pal = null; // built from the PNG
-            result.Add(new TrainerPic(name, int.Parse(m.Groups[2].Value), e.Front ?? "", e.Pal ?? "", png, pal));
+            result.Add(new TrainerPic(name, id, e.Front ?? "", e.Pal ?? "", png, pal));
         }
         return result;
     }
@@ -72,6 +85,7 @@ public static partial class CharacterGraphics
     public static List<PlayerGraphic> Player(string root, IReadOnlyList<OverworldSprite> sprites)
     {
         var result = new List<PlayerGraphic>();
+        var trainerPics = TrainerPics(root).GroupBy(p => p.Constant).ToDictionary(g => g.Key, g => g.First());
         foreach (var who in new[] { "brendan", "may" })
         {
             string character = who == "brendan" ? "Brendan" : "May";
@@ -92,7 +106,9 @@ public static partial class CharacterGraphics
             var front = $"graphics/trainers/front_pics/{who}.png";
             if (File.Exists(Path.Combine(root, front.Replace('/', Path.DirectorySeparatorChar))))
             {
-                var frontPal = $"graphics/trainers/front_pics/{who}.pal";
+                // The palette registered for TRAINER_PIC_BRENDAN/MAY (graphics/trainers/palettes/ in expansion 1.13+), else one next to the PNG.
+                var frontPal = trainerPics.TryGetValue("TRAINER_PIC_" + who.ToUpperInvariant(), out var tp) && tp.PalRel != null
+                    ? tp.PalRel : $"graphics/trainers/front_pics/{who}.pal";
                 bool hasPal = File.Exists(Path.Combine(root, frontPal.Replace('/', Path.DirectorySeparatorChar)));
                 result.Add(new PlayerGraphic(character, "Battle: front picture", front, hasPal ? frontPal : null, false,
                     "Shown in battle intros, the trainer card and link battles."));

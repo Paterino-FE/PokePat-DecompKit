@@ -52,22 +52,35 @@ public class SpriteImportTests
         var sprites = OverworldSprites.Load(root);
         var pals = OverworldSprites.Palettes(sprites).ToDictionary(kv => kv.Key, kv => JascPalette.Load(Path.Combine(root, kv.Value)));
         var sheet = MakeSheet(root, pals["OBJ_EVENT_PAL_TAG_NPC_1"], offColor: false);
+        var constsPath = Path.Combine(root, "include", "constants", "event_objects.h");
+        var countBefore = new TilesetEditor.Core.Project.CDefines();
+        countBefore.AddFromText(File.ReadAllText(constsPath));
+        long num = countBefore.TryEvaluate("NUM_OBJ_EVENT_GFX")!.Value;
+        bool incGfx = File.ReadAllText(Path.Combine(root, SpriteImportPlanner.GraphicsFile.Replace('/', Path.DirectorySeparatorChar))).Contains("INCGFX_");
         var result = SpriteImportPlanner.Plan(root, new SpriteImportRequest("TownGuard", sheet, 16, 32, "OBJ_EVENT_PAL_TAG_NPC_1", false), sprites, pals);
         Assert.Equal("OBJ_EVENT_GFX_TOWN_GUARD", result.Constant);
-        Assert.Equal(7, result.Plan.Files.Count);
+        Assert.Equal(incGfx ? 6 : 7, result.Plan.Files.Count); // INCGFX carries -mwidth/-mheight: no make rule
         Assert.True(new ExportApplier(backupRoot: TestPaths.NewTempDir("backup")).Apply(result.Plan).Success);
 
         var after = OverworldSprites.Load(root);
         var guard = Assert.Single(after, s => s.GfxId == "OBJ_EVENT_GFX_TOWN_GUARD");
         Assert.Equal((16, 32, "OBJ_EVENT_PAL_TAG_NPC_1", "graphics/object_events/pics/people/town_guard.png"), (guard.Width, guard.Height, guard.PaletteTag, guard.PngPath));
-        var consts = File.ReadAllText(Path.Combine(root, "include", "constants", "event_objects.h"));
-        Assert.Contains("#define OBJ_EVENT_GFX_TOWN_GUARD                 261", consts);
-        Assert.Contains("#define NUM_OBJ_EVENT_GFX                        262", consts);
+        var consts = File.ReadAllText(constsPath);
+        var countAfter = new TilesetEditor.Core.Project.CDefines();
+        countAfter.AddFromText(consts);
+        Assert.Equal(num, countAfter.TryEvaluate("OBJ_EVENT_GFX_TOWN_GUARD"));
+        Assert.Equal(num + 1, countAfter.TryEvaluate("NUM_OBJ_EVENT_GFX"));
+        if (consts.Contains("#define NUM_OBJ_EVENT_GFX")) Assert.Matches(@"\n#define OBJ_EVENT_GFX_TOWN_GUARD +" + num + "\n", consts);
+        else Assert.Contains("    OBJ_EVENT_GFX_TOWN_GUARD,\n    NUM_OBJ_EVENT_GFX,", consts);
         var pointers = File.ReadAllText(Path.Combine(root, "src", "data", "object_events", "object_event_graphics_info_pointers.h"));
         Assert.Contains("extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_TownGuard;", pointers);
         Assert.Contains("    [OBJ_EVENT_GFX_TOWN_GUARD] = &gObjectEventGraphicsInfo_TownGuard,", pointers);
-        Assert.EndsWith("$(OBJEVENTGFXDIR)/people/town_guard.4bpp: %.4bpp: %.png\n\t$(GFX) $< $@ -mwidth 2 -mheight 4\n",
-            File.ReadAllText(Path.Combine(root, "spritesheet_rules.mk")));
+        if (incGfx)
+            Assert.Contains("const u32 gObjectEventPic_TownGuard[] = INCGFX_U32(\"graphics/object_events/pics/people/town_guard.png\", \".4bpp\", \"-mwidth 2 -mheight 4\");",
+                File.ReadAllText(Path.Combine(root, SpriteImportPlanner.GraphicsFile.Replace('/', Path.DirectorySeparatorChar))));
+        else
+            Assert.EndsWith("$(OBJEVENTGFXDIR)/people/town_guard.4bpp: %.4bpp: %.png\n\t$(GFX) $< $@ -mwidth 2 -mheight 4\n",
+                File.ReadAllText(Path.Combine(root, "spritesheet_rules.mk")));
         // The written PNG is 4-bit indexed with npc_1's colors and checks clean.
         var written = Png.Load(Path.Combine(root, "graphics", "object_events", "pics", "people", "town_guard.png"));
         Assert.True(written.IsIndexed);
@@ -105,8 +118,9 @@ public class SpriteImportTests
                     img[f * 16 + x, y] = colors[(x + y) % colors.Length];
         var sheet = Path.Combine(root, "own.png");
         File.WriteAllBytes(sheet, Png.EncodeRgba(img));
+        bool incGfx = File.ReadAllText(Path.Combine(root, SpriteImportPlanner.GraphicsFile.Replace('/', Path.DirectorySeparatorChar))).Contains("INCGFX_");
         var result = SpriteImportPlanner.Plan(root, new SpriteImportRequest("TkKnight", sheet, 16, 32, "", false, "TkKnight"), sprites, pals);
-        Assert.Equal(9, result.Plan.Files.Count);
+        Assert.Equal(incGfx ? 8 : 9, result.Plan.Files.Count);
         Assert.True(new ExportApplier(backupRoot: TestPaths.NewTempDir("backup")).Apply(result.Plan).Success);
 
         var pal = JascPalette.Load(Path.Combine(root, "graphics", "object_events", "palettes", "tk_knight.pal"));
@@ -118,7 +132,9 @@ public class SpriteImportTests
         var movement = File.ReadAllText(Path.Combine(root, "src", "event_object_movement.c"));
         Assert.Matches(@"\{gObjectEventPal_TkKnight,\s+OBJ_EVENT_PAL_TAG_TK_KNIGHT\},", movement);
         var gfx = File.ReadAllText(Path.Combine(root, "src", "data", "object_events", "object_event_graphics.h"));
-        Assert.Contains("const u16 gObjectEventPal_TkKnight[] = INCBIN_U16(\"graphics/object_events/palettes/tk_knight.gbapal\");", gfx);
+        Assert.Contains(incGfx
+            ? "const u16 gObjectEventPal_TkKnight[] = INCGFX_U16(\"graphics/object_events/palettes/tk_knight.pal\", \".gbapal\");"
+            : "const u16 gObjectEventPal_TkKnight[] = INCBIN_U16(\"graphics/object_events/palettes/tk_knight.gbapal\");", gfx);
         var after = OverworldSprites.Load(root);
         Assert.Equal("OBJ_EVENT_PAL_TAG_TK_KNIGHT", after.Single(s => s.GfxId == "OBJ_EVENT_GFX_TK_KNIGHT").PaletteTag);
         Assert.Contains("OBJ_EVENT_PAL_TAG_TK_KNIGHT", OverworldSprites.Palettes(after).Keys);
@@ -151,7 +167,10 @@ public class SpriteImportTests
         Assert.Equal(before.Max(p => p.Id) + 1, pic.Id);
         Assert.Equal(("graphics/trainers/front_pics/sea_captain.png", "graphics/trainers/palettes/sea_captain.pal"), (pic.PngRel, pic.PalRel));
         var consts = File.ReadAllText(Path.Combine(root, "include", "constants", "trainers.h"));
-        Assert.Matches(@"#define TRAINER_PIC_COUNT\s+" + (pic.Id + 1), consts);
+        var counted = new TilesetEditor.Core.Project.CDefines();
+        counted.AddFromText(consts);
+        Assert.Equal(pic.Id + 1, counted.TryEvaluate("TRAINER_PIC_COUNT"));
+        Assert.Equal(before.Count + 1, after.Count);
         var written = Png.Load(Path.Combine(root, "graphics", "trainers", "front_pics", "sea_captain.png"));
         Assert.Equal((64, 64, 4, (byte)0), (written.Width, written.Height, written.BitDepth, written.Indices![0]));
         // Too big / too many colors is refused

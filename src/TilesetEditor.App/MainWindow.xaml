@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:TilesetEditor.App.Shell"
         Title="{Binding WindowTitle}" Width="1500" Height="920" MinWidth="1100" MinHeight="650" FontFamily="Segoe UI"
-        WindowStartupLocation="CenterScreen" Background="{StaticResource PanelBrush}" Icon="{StaticResource LogoImage}">
+        WindowStartupLocation="CenterScreen" Background="{DynamicResource PanelBrush}" Icon="{StaticResource LogoImage}">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVis"/>
         <shell:ModuleIconConverter x:Key="ModuleIcon"/>
@@ -22,7 +22,9 @@
                     <Button Content="▶ Build ROM" Command="{Binding BuildCommand}" FontWeight="SemiBold"/>
                     <Button Content="🎮 Emulator" Command="{Binding OpenInEmulatorCommand}"
                             ToolTip="Available after a successful build if an emulator is set (Setup…)."/>
-                    <Button Content="Build output" Command="{Binding ToggleBuildPanelCommand}" Margin="0"/>
+                    <Button Content="Build output" Command="{Binding ToggleBuildPanelCommand}"/>
+                    <Button Content="{Binding ThemeButtonText}" Command="{Binding ToggleThemeCommand}" Margin="0" Padding="9,4"
+                            ToolTip="Light / dark mode"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Image Source="{StaticResource LogoImage}" Width="34" Height="34" Margin="0,0,10,0"/>
@@ -33,7 +35,7 @@
                         <TextBlock Text="for pokeemerald-expansion" Foreground="#FFD6D6" FontSize="10"/>
                     </StackPanel>
                     <Button Content="Open project…" Command="{Binding OpenProjectCommand}"/>
-                    <Button Content="Setup…" Command="{Binding SetupCommand}" ToolTip="Project folder and tool paths (Porymap, emulator, Porytiles, build)"/>
+                    <Button Content="Setup…" Command="{Binding SetupCommand}" ToolTip="Get started: install or check pokeemerald-expansion, Porymap, mGBA, Porytiles, Poryscript and the build tools – or set paths manually"/>
                     <ComboBox ItemsSource="{Binding RecentProjects}" Width="26" ToolTip="Recently opened" Margin="0,0,10,0" x:Name="Recent"
                               SelectionChanged="OnRecentSelected" VerticalAlignment="Center"/>
                     <TextBlock Text="{Binding ProjectHeader}" Foreground="White" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
@@ -42,10 +44,20 @@
             </DockPanel>
         </Border>
         <!-- White band under the roof, like the front of the building -->
-        <Border DockPanel.Dock="Top" Height="5" Background="White" BorderBrush="{StaticResource PinkStrongBrush}" BorderThickness="0,0,0,1"/>
+        <Border DockPanel.Dock="Top" Height="5" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource PinkStrongBrush}" BorderThickness="0,0,0,1"/>
+
+        <!-- Notice: updates found by the check on start -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource WarnBannerBrush}" BorderBrush="{DynamicResource WarnLineBrush}" BorderThickness="0,0,0,1" Padding="12,5"
+                Visibility="{Binding HasUpdateNotice, Converter={StaticResource BoolVis}}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Later" Command="{Binding DismissUpdateNoticeCommand}" Margin="0"/>
+                <Button DockPanel.Dock="Right" Content="Show updates…" Command="{Binding ShowUpdatesCommand}" FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding UpdateNotice}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            </DockPanel>
+        </Border>
 
         <!-- Notice: project re-read after outside changes (Porymap, git) -->
-        <Border DockPanel.Dock="Top" Background="#FFF4D6" BorderBrush="#F2B544" BorderThickness="0,0,0,1" Padding="12,5"
+        <Border DockPanel.Dock="Top" Background="{DynamicResource WarnBannerBrush}" BorderBrush="{DynamicResource WarnLineBrush}" BorderThickness="0,0,0,1" Padding="12,5"
                 Visibility="{Binding HasProjectNotice, Converter={StaticResource BoolVis}}">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="OK" Command="{Binding DismissNoticeCommand}" Margin="0"/>
@@ -54,7 +66,7 @@
         </Border>
 
         <!-- Status bar: build result -->
-        <Border DockPanel.Dock="Bottom" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12,5">
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12,5">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                     <Button Content="Cancel" Command="{Binding CancelBuildCommand}" Visibility="{Binding IsBuilding, Converter={StaticResource BoolVis}}"/>
@@ -66,10 +78,10 @@
                 <TextBlock Text="{Binding BuildStatus}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="#B8212B"/>
+                            <Setter Property="Foreground" Value="{DynamicResource AccentDarkBrush}"/>
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding BuildSucceeded}" Value="True"><Setter Property="Foreground" Value="#2E7D4F"/></DataTrigger>
-                                <DataTrigger Binding="{Binding IsBuilding}" Value="True"><Setter Property="Foreground" Value="#3B2F2F"/></DataTrigger>
+                                <DataTrigger Binding="{Binding BuildSucceeded}" Value="True"><Setter Property="Foreground" Value="{DynamicResource SuccessBrush}"/></DataTrigger>
+                                <DataTrigger Binding="{Binding IsBuilding}" Value="True"><Setter Property="Foreground" Value="{DynamicResource InkBrush}"/></DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </TextBlock.Style>
@@ -79,7 +91,7 @@
 
         <!-- Build output panel -->
         <Border DockPanel.Dock="Bottom" Height="230" Visibility="{Binding ShowBuildPanel, Converter={StaticResource BoolVis}}"
-                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Background="#2A2121">
+                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Background="#2A2121">
             <TextBox Text="{Binding BuildOutput, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" FontSize="11"
                      Background="#2A2121" Foreground="#F5E9E6" BorderThickness="0"
                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextChanged="OnBuildOutputChanged">
@@ -92,7 +104,7 @@
         </Border>
 
         <!-- Navigation -->
-        <Border DockPanel.Dock="Left" Width="214" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
+        <Border DockPanel.Dock="Left" Width="214" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
             <ListBox ItemsSource="{Binding Modules}" SelectedItem="{Binding SelectedModule}" BorderThickness="0" Padding="6,8"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      AutomationProperties.Name="Modules">
@@ -110,11 +122,11 @@
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="Card" Property="Background" Value="#FFF4F4"/>
+                                            <Setter TargetName="Card" Property="Background" Value="{DynamicResource HoverBrush}"/>
                                         </Trigger>
                                         <Trigger Property="IsSelected" Value="True">
-                                            <Setter TargetName="Card" Property="Background" Value="{StaticResource PinkBrush}"/>
-                                            <Setter TargetName="Marker" Property="Background" Value="{StaticResource AccentBrush}"/>
+                                            <Setter TargetName="Card" Property="Background" Value="{DynamicResource PinkBrush}"/>
+                                            <Setter TargetName="Marker" Property="Background" Value="{DynamicResource AccentBrush}"/>
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
@@ -125,14 +137,14 @@
                 <ListBox.ItemTemplate>
                     <DataTemplate>
                         <DockPanel>
-                            <Border DockPanel.Dock="Left" Width="30" Height="30" CornerRadius="15" Background="{StaticResource PinkBrush}"
-                                    BorderBrush="{StaticResource PinkStrongBrush}" BorderThickness="1" Margin="0,0,9,0" VerticalAlignment="Top">
+                            <Border DockPanel.Dock="Left" Width="30" Height="30" CornerRadius="15" Background="{DynamicResource PinkBrush}"
+                                    BorderBrush="{DynamicResource PinkStrongBrush}" BorderThickness="1" Margin="0,0,9,0" VerticalAlignment="Top">
                                 <TextBlock Text="{Binding Title, Converter={StaticResource ModuleIcon}}" FontFamily="Segoe UI Emoji" FontSize="14"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
                             <StackPanel>
-                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13.5" Foreground="{StaticResource InkBrush}"/>
-                                <TextBlock Text="{Binding Description}" FontSize="11" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13.5" Foreground="{DynamicResource InkBrush}"/>
+                                <TextBlock Text="{Binding Description}" FontSize="11" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap"/>
                             </StackPanel>
                         </DockPanel>
                     </DataTemplate>

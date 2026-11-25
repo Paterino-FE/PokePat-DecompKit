@@ -32,7 +32,7 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Border Width="16" Height="16" Margin="0,0,2,2" BorderBrush="#B3A3A0" BorderThickness="1" Background="{Binding Brush}" ToolTip="{Binding Tip}"/>
+                        <Border Width="16" Height="16" Margin="0,0,2,2" BorderBrush="{DynamicResource MutedBrush}" BorderThickness="1" Background="{Binding Brush}" ToolTip="{Binding Tip}"/>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>

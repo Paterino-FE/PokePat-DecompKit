@@ -73,10 +73,10 @@ public partial class GameDataView : UserControl
   <TextBlock.Style>
     <Style TargetType='TextBlock'>
       <Style.Triggers>
-        <DataTrigger Binding='{{Binding {cell}.IsEditable}}' Value='False'><Setter Property='Foreground' Value='#7D6B69'/><Setter Property='FontStyle' Value='Italic'/></DataTrigger>
+        <DataTrigger Binding='{{Binding {cell}.IsEditable}}' Value='False'><Setter Property='Foreground' Value='{{DynamicResource MutedBrush}}'/><Setter Property='FontStyle' Value='Italic'/></DataTrigger>
         <DataTrigger Binding='{{Binding {cell}.IsChanged}}' Value='True'><Setter Property='FontWeight' Value='SemiBold'/></DataTrigger>
-        <DataTrigger Binding='{{Binding {cell}.HasWarning}}' Value='True'><Setter Property='Background' Value='#FED7AA'/></DataTrigger>
-        <DataTrigger Binding='{{Binding {cell}.HasError}}' Value='True'><Setter Property='Background' Value='#FCA5A5'/></DataTrigger>
+        <DataTrigger Binding='{{Binding {cell}.HasWarning}}' Value='True'><Setter Property='Background' Value='{{DynamicResource WarnCellBrush}}'/></DataTrigger>
+        <DataTrigger Binding='{{Binding {cell}.HasError}}' Value='True'><Setter Property='Background' Value='{{DynamicResource ErrorCellBrush}}'/></DataTrigger>
       </Style.Triggers>
     </Style>
   </TextBlock.Style>

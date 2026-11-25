@@ -55,7 +55,7 @@ internal static class TestPaths
         [
             "include/fieldmap.h", "include/global.fieldmap.h", "include/constants/metatile_behaviors.h", "include/constants/expansion.h",
             "src/data/tilesets/headers.h", "src/data/tilesets/graphics.h", "src/data/tilesets/metatiles.h", "src/graphics.c",
-            "data/layouts/layouts.json", "Makefile",
+            "data/layouts/layouts.json", "Makefile", "src/fieldmap.c",
         ];
         foreach (var f in files) Copy(src, dst, f);
         foreach (var f in Directory.EnumerateFiles(Path.Combine(src, "data", "tilesets", "primary", "general"), "*", SearchOption.AllDirectories))

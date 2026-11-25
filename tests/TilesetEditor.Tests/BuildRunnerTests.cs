@@ -2,22 +2,27 @@ using TilesetEditor.Toolkit;
 
 namespace TilesetEditor.Tests;
 
-/// <summary>Build runner behaviour with cmd.exe commands standing in for make.</summary>
+/// <summary>Build runner behaviour with shell commands standing in for make (cmd.exe on Windows, bash elsewhere).</summary>
 public class BuildRunnerTests
 {
+    private static readonly bool Win = OperatingSystem.IsWindows();
+
     private static BuildRequest Req(string root, string command) => new()
     {
         ProjectRoot = root,
         RomRelativePath = "pokeemerald.gba",
-        Settings = new ProjectToolSettings { BuildEnvironment = BuildEnvironment.Windows, BuildCommand = command },
+        Settings = new ProjectToolSettings { BuildEnvironment = Win ? BuildEnvironment.Windows : BuildEnvironment.Native, BuildCommand = command },
     };
+
+    /// <summary>Waits about <paramref name="seconds"/> seconds.</summary>
+    private static string Sleep(int seconds) => Win ? $"ping -n {seconds + 1} 127.0.0.1 >nul" : $"sleep {seconds}";
 
     [Fact]
     public async Task Success_ReportsFreshRomThenUpToDate()
     {
         var root = TestPaths.NewTempDir("build");
         var lines = new List<string>();
-        var r1 = await new BuildRunner().RunAsync(Req(root, "echo built> pokeemerald.gba && echo done"), lines.Add, CancellationToken.None);
+        var r1 = await new BuildRunner().RunAsync(Req(root, Win ? "echo built> pokeemerald.gba && echo done" : "echo built > pokeemerald.gba && echo done"), lines.Add, CancellationToken.None);
         Assert.True(r1.Success);
         Assert.Equal(RomState.Rebuilt, r1.RomState);
         Assert.Equal(Path.Combine(root, "pokeemerald.gba"), r1.ConfirmedRomPath);
@@ -34,7 +39,7 @@ public class BuildRunnerTests
     {
         var root = TestPaths.NewTempDir("build");
         File.WriteAllText(Path.Combine(root, "pokeemerald.gba"), "old rom from yesterday");
-        var r = await new BuildRunner().RunAsync(Req(root, "echo src/foo.c:1: error: boom 1>&2 && exit /b 2"), _ => { }, CancellationToken.None);
+        var r = await new BuildRunner().RunAsync(Req(root, Win ? "echo src/foo.c:1: error: boom 1>&2 && exit /b 2" : "echo src/foo.c:1: error: boom 1>&2 && exit 2"), _ => { }, CancellationToken.None);
         Assert.False(r.Success);
         Assert.Equal(2, r.ExitCode);
         Assert.Equal(RomState.None, r.RomState);
@@ -56,7 +61,7 @@ public class BuildRunnerTests
     public async Task ParallelBuildOfSameProject_IsRejected()
     {
         var root = TestPaths.NewTempDir("build");
-        var first = new BuildRunner().RunAsync(Req(root, "ping -n 6 127.0.0.1 >nul && echo x> pokeemerald.gba"), _ => { }, CancellationToken.None);
+        var first = new BuildRunner().RunAsync(Req(root, Sleep(5) + (Win ? " && echo x> pokeemerald.gba" : " && echo x > pokeemerald.gba")), _ => { }, CancellationToken.None);
         // Under load the first build may take a moment to take the lock: wait for it instead of a fixed delay.
         for (int i = 0; i < 50 && !BuildRunner.IsRunning(root); i++) await Task.Delay(100);
         Assert.True(BuildRunner.IsRunning(root));
@@ -71,12 +76,12 @@ public class BuildRunnerTests
         var root = TestPaths.NewTempDir("build");
         File.WriteAllText(Path.Combine(root, "pokeemerald.gba"), "old");
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
-        var r = await new BuildRunner().RunAsync(Req(root, "ping -n 10 127.0.0.1 >nul"), _ => { }, cts.Token);
+        var r = await new BuildRunner().RunAsync(Req(root, Sleep(9)), _ => { }, cts.Token);
         Assert.True(r.Cancelled);
         Assert.Null(r.ConfirmedRomPath);
     }
 
-    [Fact]
+    [WindowsFact]
     public void WslCommandLine_UsesProjectRootAsWorkingDirectory()
     {
         var (file, args, wd) = BuildRunner.BuildCommandLine(@"\\wsl.localhost\Ubuntu\home\me\my project",

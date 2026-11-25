@@ -8,7 +8,7 @@
         <!-- One palette / color row: title + swatches -->
         <DataTemplate x:Key="PaletteRowTemplate">
             <StackPanel Margin="0,0,0,4">
-                <TextBlock Text="{Binding Title}" FontSize="11" Foreground="#444"/>
+                <TextBlock Text="{Binding Title}" FontSize="11" Foreground="{DynamicResource MutedBrush}"/>
                 <ItemsControl ItemsSource="{Binding Colors}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
@@ -53,10 +53,37 @@
                         <TextBlock Text="{Binding ProjectSummary}" Style="{StaticResource Hint}" FontSize="11"/>
                     </StackPanel>
                 </GroupBox>
+                <GroupBox Header="Finished tileset">
+                    <StackPanel>
+                        <Button Content="Import finished tileset…" Command="{Binding ImportFinishedCommand}" FontWeight="SemiBold" Margin="0,0,0,4"
+                                ToolTip="A folder with a tiles PNG, palettes and metatiles (asset repos, other hacks): add it as a new tileset or replace one, and use it on maps."/>
+                        <TextBlock Style="{StaticResource Hint}" FontSize="11" TextWrapping="Wrap"
+                                   Text="Or drag the tileset's folder onto this page. To build a new tileset from your own images, use the steps below."/>
+                    </StackPanel>
+                </GroupBox>
+                <GroupBox Header="Edit or create as images">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Hint}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4"
+                                   Text="PokePat puts the layers (bottom, middle, top) as PNGs into a folder. Paint in Aseprite, Paint.NET … and save – PokePat reloads and rebuilds the preview by itself."/>
+                        <ComboBox ItemsSource="{Binding SecondaryTilesets}" SelectedItem="{Binding EditTarget}" IsTextSearchEnabled="True" Margin="0,0,0,4"/>
+                        <WrapPanel>
+                            <Button Content="Edit as images…" Command="{Binding EditExistingCommand}" Margin="0,0,6,4"
+                                    ToolTip="Exporting afterwards replaces this tileset in place – same metatile order, behaviors (grass, water …) kept."/>
+                            <Button Content="New blank tileset…" Command="{Binding NewBlankCommand}" Margin="0,0,0,4"/>
+                        </WrapPanel>
+                        <StackPanel Visibility="{Binding HasWorkFolder, Converter={StaticResource BoolVis}}">
+                            <TextBlock Text="{Binding WorkFolder}" Style="{StaticResource Hint}" FontSize="10" TextWrapping="Wrap"/>
+                            <WrapPanel>
+                                <Button Content="Open folder" Command="{Binding OpenWorkFolderCommand}" Margin="0,2,6,0"/>
+                                <CheckBox Content="Rebuild when saved" IsChecked="{Binding AutoRebuild}" VerticalAlignment="Center" Margin="0,2,0,0"/>
+                            </WrapPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </GroupBox>
                 <GroupBox Header="2 · Import PNG">
                     <StackPanel>
-                        <Border BorderBrush="#9AA3AF" BorderThickness="1" Background="#FAFBFC" Padding="8" Margin="0,0,0,6">
-                            <TextBlock TextWrapping="Wrap" Foreground="#5A6270"
+                        <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Background="{DynamicResource PanelBrush}" Padding="8" Margin="0,0,0,6">
+                            <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}"
                                        Text="Drag PNGs here. One file = one layer; 2–3 files = layers (names containing bottom/middle/top or unten/mitte/oben)."/>
                         </Border>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
@@ -75,7 +102,7 @@
                     <StackPanel>
                         <TextBox Text="{Binding TilesetName, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas"/>
                         <TextBlock Text="{Binding FolderPreview}" Style="{StaticResource Hint}" FontSize="11"/>
-                        <TextBlock Text="{Binding NameError}" Foreground="#C62828" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding NameError}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap"/>
                         <CheckBox Content="Also store RGBA source layers" IsChecked="{Binding IncludeSources}" Margin="0,4"
                                   ToolTip="Stores the imported layers and a manifest in &lt;Tileset&gt;/tileset_editor/ (for later changes; not part of the build)."/>
                         <WrapPanel Margin="0,4,0,0">
@@ -104,7 +131,7 @@
             </WrapPanel>
             <TabControl SelectedIndex="{Binding SelectedTab}">
                 <TabItem Header="Import (original colors)">
-                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#F6ECE8">
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="{DynamicResource BorderBrush}">
                         <c:PixelCanvas Image="{Binding PreviewImage}" Zoom="{Binding Zoom}" ShowTileGrid="{Binding ShowTileGrid}"
                                        Markers="{Binding Markers}" SelectedTile="{Binding SelectedTile}" TileClickCommand="{Binding TileClickCommand}"
                                        Margin="8" HorizontalAlignment="Left" VerticalAlignment="Top"/>
@@ -112,13 +139,13 @@
                 </TabItem>
                 <TabItem Header="Compiled (GBA colors)">
                     <Grid>
-                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#F6ECE8">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="{DynamicResource BorderBrush}">
                             <c:PixelCanvas Image="{Binding CompiledImage}" Zoom="{Binding Zoom}" ShowTileGrid="{Binding ShowTileGrid}"
                                            Markers="{Binding Markers}" SelectedTile="{Binding SelectedTile}" TileClickCommand="{Binding TileClickCommand}"
                                            Margin="8" HorizontalAlignment="Left" VerticalAlignment="Top"/>
                         </ScrollViewer>
                         <TextBlock Text="No compiled output yet. Run &quot;Compile (Porytiles)&quot;." Margin="16"
-                                   Foreground="#5A6270">
+                                   Foreground="{DynamicResource MutedBrush}">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
                                     <Style.Triggers>
@@ -175,7 +202,7 @@
             </StackPanel>
         </ScrollViewer>
 
-        <GridSplitter Grid.Row="1" Grid.ColumnSpan="3" HorizontalAlignment="Stretch" Background="#D0D4DA"/>
+        <GridSplitter Grid.Row="1" Grid.ColumnSpan="3" HorizontalAlignment="Stretch" Background="{DynamicResource BorderBrush}"/>
 
         <!-- Bottom: issues and log -->
         <TabControl Grid.Row="2" Grid.ColumnSpan="3" Margin="0,4,0,0">
@@ -183,7 +210,7 @@
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="Problems  "/>
-                        <TextBlock Text="{Binding IssueSummary}" Foreground="#5A6270"/>
+                        <TextBlock Text="{Binding IssueSummary}" Foreground="{DynamicResource MutedBrush}"/>
                     </StackPanel>
                 </TabItem.Header>
                 <DataGrid ItemsSource="{Binding Issues}" SelectedItem="{Binding SelectedIssue}" AutoGenerateColumns="False" IsReadOnly="True"

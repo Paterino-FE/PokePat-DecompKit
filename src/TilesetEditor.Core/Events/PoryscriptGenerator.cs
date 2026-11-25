@@ -243,6 +243,11 @@ public static partial class PoryscriptGenerator
                 case ParamKind.Sound: Known(symbols?.Sounds, "Sound"); break;
                 case ParamKind.Weather: Known(symbols?.Weathers, "Weather"); break;
                 case ParamKind.Special: Known(symbols?.Specials, "Special"); break;
+                case ParamKind.Portrait:
+                    if (symbols != null && symbols.Portraits.Count == 0)
+                        problems.Add(new(true, who, $"{block}: needs the mod \"Dialog portraits\" with at least one portrait (Mods module)."));
+                    else Known(symbols?.Portraits, "Portrait");
+                    break;
                 case ParamKind.Choice:
                     if (p.Choices != null && !p.Choices.Contains(v)) problems.Add(new(true, who, $"{block}: \"{v}\" is not allowed for \"{p.Label}\"."));
                     break;

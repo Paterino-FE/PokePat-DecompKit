@@ -116,7 +116,9 @@ public class GeneratorTests
     {
         var symbols = ProjectSymbols.Load(EventFixtures.Root);
         Assert.Contains(symbols.Flags, f => f.Name == "FLAG_UNUSED_0x020" && f.IsUnused);
-        Assert.Contains(symbols.Items, i => i.Name == "ITEM_POTION" && i.DisplayName == "POTION");
+        Assert.Contains(symbols.Items, i => i.Name == "ITEM_POTION" && i.DisplayName.Equals("Potion", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("OBJ_EVENT_GFX_YOUNGSTER", symbols.ObjectGraphics);
+        Assert.Contains("SPECIES_ZIGZAGOON", symbols.Species);
 
         var bad = EventFixtures.OldMan();
         bad.Steps.Add(new SetFlagStep { Flag = "FLAG_DOES_NOT_EXIST" });
@@ -341,7 +343,8 @@ public class PoryscriptIntegrationTests
         if (!Directory.Exists(root)) root = EventFixtures.Root;
         var doc = new ToolkitEventDocument { Events = [EventFixtures.OldMan()] };
         var pory = PoryscriptGenerator.Generate(doc, EventFixtures.Font, EventFixtures.Charmap);
-        var result = await new PoryscriptRunner(new ProjectToolSettings { BuildEnvironment = BuildEnvironment.Wsl, BuildWslDistro = "Ubuntu" })
+        var env = OperatingSystem.IsWindows() ? BuildEnvironment.Wsl : BuildEnvironment.Native;
+        var result = await new PoryscriptRunner(new ProjectToolSettings { BuildEnvironment = env, BuildWslDistro = "Ubuntu" })
             .CompileAsync(root, pory, CancellationToken.None);
         Assert.True(result.Success, result.Output);
         Assert.StartsWith("3.", result.Version);

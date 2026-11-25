@@ -34,7 +34,7 @@ public sealed class ShellViewModel : ObservableObject
         Modules.Add(new ProjectOverviewViewModel(Context, Navigate));
         _tilesets = new TilesetEditorViewModel(Context);
         Modules.Add(_tilesets);
-        _maps = new MapsViewModel(Context, NewTilesetForPrimary);
+        _maps = new MapsViewModel(Context, NewTilesetForPrimary, map => OpenInPorymap(map));
         Modules.Add(_maps);
         Modules.Add(new SecretBasesViewModel(Context));
         Modules.Add(new EventsViewModel(Context));
@@ -44,6 +44,7 @@ public sealed class ShellViewModel : ObservableObject
         Modules.Add(new SpritesViewModel(Context));
         Modules.Add(new GraphicsViewModel(Context));
         Modules.Add(new FeaturesViewModel(Context));
+        Modules.Add(new Modules.Mods.ModsViewModel(Context));
         foreach (var m in PlannedModule.Roadmap()) Modules.Add(m);
         _selectedModule = Modules[0];
 
@@ -63,7 +64,15 @@ public sealed class ShellViewModel : ObservableObject
         {
             if (ConfirmedRomPath != null) Process.Start("explorer.exe", $"/select,\"{ConfirmedRomPath}\"");
         }, () => ConfirmedRomPath != null);
-        ToggleBuildPanelCommand = new RelayCommand(() => ShowBuildPanel = !ShowBuildPanel);
+        ToggleThemeCommand = new RelayCommand(() =>
+        {
+            var next = ThemeManager.IsDark ? AppTheme.Light : AppTheme.Dark;
+            ThemeManager.Apply(next);
+            Context.Settings.Theme = next.ToString();
+            Context.Save();
+            OnPropertyChanged(nameof(ThemeButtonText));
+        });
+        ToggleBuildPanelCommand = new RelayCommand(() => { _buildNumber++; ShowBuildPanel = !ShowBuildPanel; }); // a manual toggle cancels the auto-hide
 
         _flushTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(200), DispatcherPriority.Background, (_, _) => FlushOutput(), Dispatcher.CurrentDispatcher);
         Context.ProjectChanged += (_, _) =>
@@ -175,8 +184,23 @@ public sealed class ShellViewModel : ObservableObject
     public ICommand OpenProjectCommand { get; }
     public ICommand SetupCommand { get; }
 
-    /// <summary>First-run setup window (project folder required, tools optional); opens the chosen project.</summary>
-    public void RunSetup()
+    /// <summary>
+    /// "Get started" (first start and "Setup…"): installs what is missing and opens the project. "Set paths manually" leads to
+    /// the classic setup window for existing projects and own tool paths.
+    /// </summary>
+    public void RunSetup() => RunSetup(checkUpdates: false);
+
+    public void RunSetup(bool checkUpdates)
+    {
+        var start = new GetStartedWindow(Context.Settings, checkUpdates: checkUpdates) { Owner = Application.Current.MainWindow };
+        var ok = start.ShowDialog() == true;
+        Context.Save();
+        if (ok && start.ProjectRoot != null) { OpenProject(start.ProjectRoot); return; }
+        if (start.WantsManualSetup) RunManualSetup();
+    }
+
+    /// <summary>Classic setup window: project folder required, tools optional; opens the chosen project.</summary>
+    public void RunManualSetup()
     {
         var w = new SetupWindow(Context.Settings) { Owner = Application.Current.MainWindow };
         if (w.ShowDialog() != true || w.ProjectRoot == null) return;
@@ -185,6 +209,38 @@ public sealed class ShellViewModel : ObservableObject
     }
 
     public bool NeedsSetup => !Context.Settings.SetupCompleted;
+
+    private string _updateNotice = "";
+    public string UpdateNotice { get => _updateNotice; private set { if (Set(ref _updateNotice, value)) OnPropertyChanged(nameof(HasUpdateNotice)); } }
+    public bool HasUpdateNotice => UpdateNotice.Length > 0;
+    public ICommand DismissUpdateNoticeCommand => new RelayCommand(() => UpdateNotice = "");
+    public ICommand ShowUpdatesCommand => new RelayCommand(() => { UpdateNotice = ""; RunSetup(checkUpdates: true); }, () => !IsBuilding);
+
+    public static string AppVersion =>
+        (System.Reflection.Assembly.GetExecutingAssembly().GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .FirstOrDefault() as System.Reflection.AssemblyInformationalVersionAttribute)?.InformationalVersion.Split('+')[0] ?? "0.0.0";
+
+    /// <summary>Check on start (option in Get started, at most once a day): shows a notice when something can be updated.</summary>
+    public async void CheckUpdatesInBackground()
+    {
+        var s = Context.Settings;
+        if (!s.CheckUpdatesOnStart || NeedsSetup || s.LastUpdateCheckUtc > DateTime.UtcNow.AddHours(-20)) return;
+        try
+        {
+            var installer = new TilesetEditor.Toolkit.Install.Installer(TilesetEditor.Toolkit.Install.InstallOptions.FromSettings(s));
+            var found = await Task.Run(() => installer.CheckAllUpdatesAsync());
+            var app = await TilesetEditor.Toolkit.Install.Installer.CheckAppUpdateAsync(AppVersion);
+            s.LastUpdateCheckUtc = DateTime.UtcNow;
+            Context.Save();
+            var names = found.Select(u => $"{TilesetEditor.Toolkit.Install.Installer.Title(u.Component)} {u.Latest}").ToList();
+            if (app != null) names.Insert(0, $"PokéPat {app.Version}");
+            if (names.Count > 0) UpdateNotice = "Updates available: " + string.Join(", ", names) + ".";
+        }
+        catch (Exception ex) when (ex is IOException or System.Net.Http.HttpRequestException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            // An update check must never get in the way.
+        }
+    }
     public ICommand OpenRecentCommand { get; }
     public ICommand OpenInPorymapCommand { get; }
     public ICommand BuildCommand { get; }
@@ -192,6 +248,9 @@ public sealed class ShellViewModel : ObservableObject
     public ICommand OpenInEmulatorCommand { get; }
     public ICommand ShowRomInExplorerCommand { get; }
     public ICommand ToggleBuildPanelCommand { get; }
+    public ICommand ToggleThemeCommand { get; }
+    /// <summary>Moon in the light theme, sun in the dark one.</summary>
+    public string ThemeButtonText => ThemeManager.IsDark ? "🔆 Light" : "🌙 Dark";
 
     public void ImportIntoTilesetEditor(IReadOnlyList<string> files)
     {
@@ -226,13 +285,15 @@ public sealed class ShellViewModel : ObservableObject
 
     // ---- Porymap
 
-    private void OpenInPorymap()
+    private void OpenInPorymap() => OpenInPorymap(null);
+
+    /// <summary>Points Porymap at this project (and map) and starts it; see <see cref="PorymapLauncher.OpenProject"/>.</summary>
+    public void OpenInPorymap(string? mapName)
     {
-        var r = PorymapLauncher.Launch(Context.Tools.PorymapExe, Context.Root!);
-        if (r.Started) Clipboard.SetText(Context.Root!);
-        MessageBox.Show(Application.Current.MainWindow, r.Message + (r.Started ? "\n\n(The project path was copied to the clipboard.)" : ""),
-            "Open in Porymap", MessageBoxButton.OK, r.Started ? MessageBoxImage.Information : MessageBoxImage.Warning);
-        if (!r.Started) Navigate("Project");
+        var r = PorymapLauncher.OpenProject(Context.Tools.PorymapExe, Context.Root!, mapName);
+        if (r.Started) { BuildStatus = r.Message; return; }
+        MessageBox.Show(Application.Current.MainWindow, r.Message, "Open in Porymap", MessageBoxButton.OK, MessageBoxImage.Warning);
+        if (string.IsNullOrWhiteSpace(Context.Tools.PorymapExe)) Navigate("Project");
     }
 
     // ---- Build
@@ -279,6 +340,7 @@ public sealed class ShellViewModel : ObservableObject
             return;
 
         ResetBuildResult();
+        _buildNumber++; // a pending auto-hide of the previous build must not close this build's panel
         BuildOutput = "";
         lock (_pendingOutput) _pendingOutput.Clear();
         ShowBuildPanel = true;
@@ -299,6 +361,7 @@ public sealed class ShellViewModel : ObservableObject
             if (!result.Success && result.ErrorLines.Count > 0)
                 AppendOutput("\n=== Error lines ===\n" + string.Join("\n", result.ErrorLines.TakeLast(15)));
             BuildStatus = sb.ToString();
+            if (result.Success || result.Cancelled) _ = HideBuildPanelSoonAsync();
         }
         catch (BuildAlreadyRunningException ex)
         {
@@ -318,6 +381,19 @@ public sealed class ShellViewModel : ObservableObject
             OnPropertyChanged(nameof(CanOpenInEmulator));
         }
     }
+
+    /// <summary>
+    /// After a successful (or cancelled) build the output panel closes by itself after a moment; the result stays in the
+    /// status bar and "Build output" opens the log again. A failed build keeps the panel open for its error lines.
+    /// </summary>
+    private async Task HideBuildPanelSoonAsync()
+    {
+        int build = ++_buildNumber;
+        await Task.Delay(TimeSpan.FromSeconds(2.5));
+        if (build == _buildNumber && !IsBuilding) ShowBuildPanel = false;
+    }
+
+    private int _buildNumber;
 
     private void AppendOutput(string line)
     {

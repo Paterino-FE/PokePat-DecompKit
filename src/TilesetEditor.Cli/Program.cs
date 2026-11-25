@@ -18,8 +18,9 @@ Console.OutputEncoding = System.Text.Encoding.UTF8;
 if (args.Length == 0 || args[0] is "-h" or "--help")
 {
     Console.WriteLine("PokéPat DecompKit command line");
+    Console.WriteLine("  install [--check]           get started: download and set up WSL tools, pokeemerald-expansion, Poryscript, Porytiles, Porymap, mGBA");
     Console.WriteLine("  setup                       first-time setup: project folder (required) and tool paths (optional)");
-    Console.WriteLine("  info | build | events | flags | gamedata | trainer | trainer-pic | sprite-import | render-dialog | compile | export");
+    Console.WriteLine("  info | build | events | flags | gamedata | trainer | trainer-pic | sprite-import | tileset-import | mods | mod-install | mod-uninstall | portrait-add | render-dialog | compile | export");
     Console.WriteLine("All commands use the project from \"setup\"; --project <folder> overrides it. Details: README.md.");
     return 0;
 }
@@ -30,6 +31,12 @@ string? Opt(string k) => opts.TryGetValue(k, out var v) ? v : null;
 
 var store = new ToolkitSettingsStore();
 var toolkitSettings = store.Load();
+if (cmd == "install")
+{
+    // install [--check] [--project-path ~/pokeemerald-expansion] [--tools <folder>] [--distro Ubuntu] [--only buildtools,porytiles] [--tag expansion/1.17.2]
+    try { return await Install.RunAsync(store, toolkitSettings, Opt, opts.ContainsKey("check")); }
+    catch (ArgumentException ex) { Console.Error.WriteLine("Error: " + ex.Message); return 1; }
+}
 if (cmd == "setup")
 {
     try { return Setup.Run(store, toolkitSettings, Opt, opts.ContainsKey("yes")); }
@@ -90,7 +97,7 @@ try
             doc.Events.RemoveAll(e => e.Label == "Route101_TK_AllBlocks");
             var demo = new TilesetEditor.Core.Events.ToolkitEvent { Label = "Route101_TK_AllBlocks", Map = "Route101", Title = "All blocks (test)" };
             demo.Steps.Add(new TilesetEditor.Core.Events.MessageStep { Text = "This event uses every block of the toolkit." });
-            foreach (var def in TilesetEditor.Core.Events.BlockCatalog.All)
+            foreach (var def in TilesetEditor.Core.Events.BlockCatalog.All.Where(d => d.RequiresMod == null))
             {
                 var step = TilesetEditor.Core.Events.CommandStep.Create(def);
                 if (def.Id == TilesetEditor.Core.Events.BlockCatalog.MacroBlockId) { step.Args["command"] = "setflag"; step.Args["arg0"] = "FLAG_UNUSED_0x021"; }
@@ -251,6 +258,109 @@ try
         var spriteApplied = new ExportApplier().Apply(res.Plan);
         Console.WriteLine(spriteApplied.Success ? $"{res.Constant} registered." : "Error: " + spriteApplied.Error);
         return spriteApplied.Success ? 0 : 3;
+    }
+
+    if (cmd is "mods" or "mod-install" or "mod-uninstall")
+    {
+        // mods                       list the mods (repository mods/ folder, next to the program, Documents/PokePat Mods)
+        // mod-install --id <id> [--yes] / mod-uninstall --id <id> [--yes]
+        var folders = new List<string> { Path.Combine(AppContext.BaseDirectory, "mods"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "PokePat Mods") };
+        for (var dd = new DirectoryInfo(AppContext.BaseDirectory); dd != null; dd = dd.Parent)
+            if (File.Exists(Path.Combine(dd.FullName, "TilesetEditor.sln"))) { folders.Add(Path.Combine(dd.FullName, "mods")); break; }
+        if (Opt("mods") is { } extra) folders.Insert(0, extra);
+        var (mods, modProblems) = TilesetEditor.Export.Mods.ModPackage.LoadAll(folders);
+        var installedMods = TilesetEditor.Export.Mods.ModRegistry.Installed(project.Root);
+        if (cmd == "mods")
+        {
+            foreach (var m in mods)
+            {
+                var check = TilesetEditor.Export.Mods.ModPlanner.Check(project.Root, m, project.ExpansionVersion);
+                Console.WriteLine($"  {m.Manifest.Id,-24} {m.Manifest.Version,-8} {(check.Installed != null ? "installed" : check.CanInstall ? "available" : "does not fit")}  {m.Manifest.Name}");
+                foreach (var pr in check.Problems) Console.WriteLine($"      ! {pr}");
+            }
+            foreach (var pr in modProblems) Console.WriteLine("  ! " + pr);
+            return 0;
+        }
+        var id = Opt("id") ?? throw new ArgumentException("--id is missing.");
+        ExportPlan modPlan;
+        if (cmd == "mod-install")
+        {
+            var pkg = mods.FirstOrDefault(m => m.Manifest.Id == id) ?? throw new ArgumentException($"Mod {id} not found.");
+            modPlan = TilesetEditor.Export.Mods.ModPlanner.PlanInstall(project.Root, pkg, project.ExpansionVersion);
+        }
+        else
+        {
+            var inst = installedMods.FirstOrDefault(m => m.Id == id) ?? throw new ArgumentException($"Mod {id} is not installed.");
+            modPlan = TilesetEditor.Export.Mods.ModPlanner.PlanUninstall(project.Root, inst).Plan;
+        }
+        foreach (var pf in modPlan.Files) Console.WriteLine($"  {pf.ActionText,-7} {pf.RelativePath,-50} {pf.Description}");
+        foreach (var n in modPlan.Notes) Console.WriteLine("  * " + n);
+        if (!opts.ContainsKey("yes")) return 0;
+        var mr = new ExportApplier().Apply(modPlan);
+        Console.WriteLine(mr.Success ? "Written." : "Error: " + mr.Error);
+        return mr.Success ? 0 : 3;
+    }
+
+    if (cmd == "portrait-add")
+    {
+        // portrait-add --name Birch (--png file.png | --trainer-pic TRAINER_PIC_X) [--yes]   (mod "dialog-portraits")
+        var pname = Opt("name") ?? throw new ArgumentException("--name is missing.");
+        TilesetEditor.Core.Imaging.PngImage picture;
+        if (Opt("png") is { } pngFile) picture = TilesetEditor.Core.Imaging.Png.Load(pngFile);
+        else
+        {
+            var tp = TilesetEditor.Core.Sprites.CharacterGraphics.TrainerPics(project.Root).FirstOrDefault(t => t.Constant == Opt("trainer-pic"))
+                     ?? throw new ArgumentException("--png or a known --trainer-pic is needed.");
+            var raw = TilesetEditor.Core.Imaging.Png.Load(Path.Combine(project.Root, tp.PngRel!));
+            var pal = tp.PalRel != null ? TilesetEditor.Core.Gba.JascPalette.Load(Path.Combine(project.Root, tp.PalRel)) : raw.Palette!;
+            var img = new TilesetEditor.Core.Imaging.RgbaImage(raw.Width, raw.Height);
+            for (int i = 0; i < img.Pixels.Length; i++)
+            {
+                int idx = raw.Indices![i] & 0xF;
+                img.Pixels[i] = idx == 0 || idx >= pal.Length ? TilesetEditor.Core.Imaging.Rgba32.Transparent : pal[idx] with { A = 255 };
+            }
+            picture = TilesetEditor.Core.Imaging.Png.Decode(TilesetEditor.Core.Imaging.Png.EncodeRgba(img));
+        }
+        var pp = TilesetEditor.Export.Mods.DialogPortraits.PlanAdd(project.Root, pname, picture);
+        foreach (var pf in pp.Files) Console.WriteLine($"  {pf.ActionText,-7} {pf.RelativePath,-50} {pf.Description}");
+        if (!opts.ContainsKey("yes")) return 0;
+        var pr2 = new ExportApplier().Apply(pp);
+        Console.WriteLine(pr2.Success ? "Written." : "Error: " + pr2.Error);
+        return pr2.Success ? 0 : 3;
+    }
+
+    if (cmd == "tileset-import")
+    {
+        // Imports a finished tileset folder (asset repos, other hacks): analysis, then a new or replaced tileset.
+        //   --folder <dir> [--name gTileset_X] [--kind primary|secondary] [--base gTileset_General] [--replace]
+        //   [--metatiles package|base] [--no-animations] [--maps LAYOUT_A,LAYOUT_B] [--yes]
+        var folder = Opt("folder") ?? throw new ArgumentException("--folder is missing.");
+        var pkg = TilesetEditor.Core.Tilesets.TilesetPackage.Read(folder, project);
+        Console.WriteLine($"Folder: {folder}");
+        Console.WriteLine($"  tile image: {(pkg.TilesImage != null ? $"{Path.GetFileName(pkg.TilesImage)} ({pkg.TileCount} tiles)" : "–")}");
+        Console.WriteLine($"  palettes: {(pkg.Palettes.Count == 0 ? "–" : string.Join(", ", pkg.Palettes.Keys.Select(k => k.ToString("00"))))}");
+        Console.WriteLine($"  metatiles: {(pkg.MetatilesFile != null ? $"{pkg.MetatileCount} ({(pkg.TilesPerMetatile == 12 ? "triple" : pkg.TilesPerMetatile == 8 ? "dual" : "?")} layer)" : "–")}, attributes: {(pkg.AttributesFile != null ? "yes" : "–")}");
+        Console.WriteLine($"  looks like: {pkg.SuggestedKind}{(pkg.SuggestedBase != null ? $" based on {pkg.SuggestedBase}" : "")}, name {pkg.SuggestedName}");
+        foreach (var n in pkg.Notes) Console.WriteLine("  * " + n);
+        foreach (var pr in pkg.Problems) Console.WriteLine("  ! " + pr);
+        var importOptions = new TilesetImportOptions
+        {
+            Mode = opts.ContainsKey("replace") ? TilesetImportMode.Replace : TilesetImportMode.New,
+            Kind = Opt("kind") is { } k ? Enum.Parse<TilesetEditor.Core.Tilesets.TilesetKind>(k, ignoreCase: true) : pkg.SuggestedKind,
+            Name = Opt("name") ?? pkg.SuggestedName,
+            Base = Opt("base") ?? pkg.SuggestedBase,
+            Metatiles = Opt("metatiles") is "base" ? MetatileSource.Base : MetatileSource.Package,
+            KeepAnimations = !opts.ContainsKey("no-animations"),
+            AssignToLayouts = Opt("maps")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [],
+        };
+        var ip = TilesetImportPlanner.Plan(project, pkg, importOptions);
+        foreach (var pf in ip.Files) Console.WriteLine($"  {(pf.Action == PlannedAction.Create ? "+" : "~")} {pf.RelativePath,-60} {pf.Description}");
+        foreach (var n in ip.Notes) Console.WriteLine("  * " + n);
+        if (!opts.ContainsKey("yes")) return 0;
+        var ir = new ExportApplier().Apply(ip);
+        Console.WriteLine(ir.Success ? "Written." : "Error: " + ir.Error);
+        return ir.Success ? 0 : 3;
     }
 
     if (cmd == "build")

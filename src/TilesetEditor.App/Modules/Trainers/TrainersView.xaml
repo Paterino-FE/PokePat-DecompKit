@@ -4,7 +4,7 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVis"/>
         <ItemsPanelTemplate x:Key="VPanel"><VirtualizingStackPanel/></ItemsPanelTemplate>
-        <Style x:Key="Pick" TargetType="ComboBox">
+        <Style x:Key="Pick" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
             <Setter Property="IsEditable" Value="True"/>
             <Setter Property="IsTextSearchEnabled" Value="True"/>
             <Setter Property="FontFamily" Value="Consolas"/>
@@ -15,7 +15,7 @@
         <Style x:Key="Lbl" TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="0,0,6,0"/>
-            <Setter Property="Foreground" Value="#6B5B59"/>
+            <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
             <Setter Property="FontSize" Value="11"/>
         </Style>
     </UserControl.Resources>
@@ -27,7 +27,11 @@
         <DockPanel Margin="0,0,8,0">
             <TextBox DockPanel.Dock="Top" Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4"
                      AutomationProperties.Name="Search trainers" ToolTip="Constant, name, class or Pokémon"/>
-            <Button DockPanel.Dock="Top" Content="New trainer…" Command="{Binding NewTrainerCommand}" Margin="0,0,0,4" HorizontalAlignment="Left"/>
+            <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+                <Button Content="New trainer…" Command="{Binding NewTrainerCommand}"/>
+                <Button Content="More trainer slots…" Command="{Binding MoreSlotsCommand}"
+                        ToolTip="Raises the trainer limit (MAX_TRAINERS_COUNT) by 64. The save block grows a little – old save files stop working."/>
+            </WrapPanel>
             <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" Style="{StaticResource Hint}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4"/>
             <ListBox ItemsSource="{Binding Trainers}" SelectedItem="{Binding Selected}" VirtualizingPanel.IsVirtualizing="True"
                      AutomationProperties.Name="Trainer list">
@@ -36,7 +40,7 @@
                         <StackPanel Margin="0,1">
                             <TextBlock Text="{Binding Id}" FontFamily="Consolas" FontSize="11" FontWeight="SemiBold"/>
                             <TextBlock Text="{Binding Title}" FontSize="11"/>
-                            <TextBlock Text="{Binding Party}" FontSize="10" Foreground="#7D6B69" TextTrimming="CharacterEllipsis" MaxWidth="260"/>
+                            <TextBlock Text="{Binding Party}" FontSize="10" Foreground="{DynamicResource MutedBrush}" TextTrimming="CharacterEllipsis" MaxWidth="260"/>
                         </StackPanel>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
@@ -66,7 +70,7 @@
                             <RowDefinition/>
                             <RowDefinition/>
                         </Grid.RowDefinitions>
-                        <Border Grid.RowSpan="4" Background="#F6ECE8" Width="72" Height="72" Margin="0,0,12,0" VerticalAlignment="Top">
+                        <Border Grid.RowSpan="4" Background="{DynamicResource BorderBrush}" Width="72" Height="72" Margin="0,0,12,0" VerticalAlignment="Top">
                             <Image Source="{Binding PicPreview}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                         </Border>
                         <TextBlock Grid.Column="1" Text="Name" Style="{StaticResource Lbl}"/>
@@ -98,20 +102,21 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border BorderBrush="#EBD9D4" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,8,8" Width="330" Background="White">
+                                <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,8,8" Width="330" Background="{DynamicResource SurfaceBrush}">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="70"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel>
-                                            <Border Background="#FFF8F2" Width="64" Height="64">
+                                            <Border Background="{DynamicResource PanelBrush}" Width="64" Height="64">
                                                 <Image Source="{Binding Preview}" Stretch="None"/>
                                             </Border>
                                             <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                                <Button Content="◀" Command="{Binding UpCommand}" ToolTip="Move left" Padding="4,0" MinWidth="0"/>
-                                                <Button Content="▶" Command="{Binding DownCommand}" ToolTip="Move right" Padding="4,0" MinWidth="0" Margin="2,0"/>
-                                                <Button Content="✕" Command="{Binding RemoveCommand}" ToolTip="Remove from party" Padding="4,0" MinWidth="0"/>
+                                                <Button Content="◀" Command="{Binding UpCommand}" ToolTip="Move left" Style="{StaticResource IconButton}"/>
+                                                <Button Content="▶" Command="{Binding DownCommand}" ToolTip="Move right" Style="{StaticResource IconButton}"/>
+                                                <Button Content="✕" Command="{Binding RemoveCommand}" ToolTip="Remove from party" Style="{StaticResource IconButton}"
+                                                        Margin="0"/>
                                             </StackPanel>
                                             <CheckBox Content="Shiny" IsChecked="{Binding IsShiny}" Margin="0,4,0,0" FontSize="11"/>
                                         </StackPanel>

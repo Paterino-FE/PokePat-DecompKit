@@ -59,23 +59,12 @@ public sealed partial class TrainerSymbols
 /// <summary>Finds front pictures of trainers and Pokémon for the editor's previews (best effort, null if not found).</summary>
 public static partial class TrainerGraphics
 {
-    [GeneratedRegex(@"TRAINER_SPRITE\(\s*(TRAINER_PIC_\w+)\s*,\s*(\w+)")]
-    private static partial Regex SpriteMacro();
-
-    [GeneratedRegex(@"(\w+)\[\]\s*=\s*INCBIN_U(?:8|16|32)\(""([^""]+)""")]
-    private static partial Regex Incbin();
-
-    /// <summary>TRAINER_PIC_X → graphics/…/x.png, via src/data/graphics/trainers.h.</summary>
+    /// <summary>TRAINER_PIC_X → graphics/…/x.png, via src/data/graphics/trainers.h (gTrainerSprites or gTrainerPicInfo).</summary>
     public static Dictionary<string, string> TrainerPics(string root)
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        var path = Path.Combine(root, "src", "data", "graphics", "trainers.h");
-        if (!File.Exists(path)) return result;
-        var text = File.ReadAllText(path);
-        var files = Incbin().Matches(text).GroupBy(m => m.Groups[1].Value).ToDictionary(g => g.Key, g => g.First().Groups[2].Value);
-        foreach (Match m in SpriteMacro().Matches(text))
-            if (files.TryGetValue(m.Groups[2].Value, out var bin))
-                result.TryAdd(m.Groups[1].Value, Regex.Replace(bin, @"\.4bpp(\.lz|\.smol)?$", ".png"));
+        foreach (var p in Sprites.CharacterGraphics.TrainerPics(root))
+            if (p.PngRel != null) result.TryAdd(p.Constant, p.PngRel);
         return result;
     }
 

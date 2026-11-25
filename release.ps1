@@ -49,6 +49,7 @@ function Copy-Common($target) {
     New-Item -ItemType Directory -Force (Join-Path $target "tools") | Out-Null
     Copy-Item tools\porytiles.lock.json, tools\setup-porytiles.ps1, tools\setup-porytiles.sh (Join-Path $target "tools")
     Copy-Item docs (Join-Path $target "docs") -Recurse -Exclude "OFFEN.md"
+    Copy-Item mods (Join-Path $target "mods") -Recurse   # mods shipped with PokePat (Mods module)
 }
 
 # ---------------- Windows

@@ -57,8 +57,42 @@ public sealed class EventsViewModel : ObservableObject, IToolkitModule
             if (_ctx.Root != null && SelectedMap != null)
                 new MapScriptsWindow(_ctx.Root, SelectedMap, _ctx.Project) { Owner = Application.Current.MainWindow }.Show();
         }, () => SelectedMap != null && _ctx.IsOpen);
+        Existing = new ExistingDialogsViewModel(RenderBoxes, CreateFromExisting, (map, label) =>
+        {
+            if (_ctx.Root != null) new MapScriptsWindow(_ctx.Root, map, _ctx.Project, label) { Owner = Application.Current.MainWindow }.Show();
+        });
         View = new EventsView { DataContext = this };
         _ = LoadAsync();
+    }
+
+    /// <summary>The "Existing in the game" tab: every person, sign, trigger and text the project already has.</summary>
+    public ExistingDialogsViewModel Existing { get; }
+
+    private int _selectedTab;
+    /// <summary>0 = my events (builder), 1 = existing in the game.</summary>
+    public int SelectedTab { get => _selectedTab; set => Set(ref _selectedTab, value); }
+
+    /// <summary>A new event in <paramref name="map"/> with the texts of an existing one as message blocks (a starting point).</summary>
+    private void CreateFromExisting(string map, string title, IReadOnlyList<string> texts)
+    {
+        if (!_allMaps.Contains(map)) return;
+        if (!Maps.Contains(map)) MapFilter = "";
+        SelectedMap = map;
+        var e = new ToolkitEvent
+        {
+            Map = map,
+            Title = "Copy of " + title,
+            Trigger = EventTrigger.Person,
+            Steps = texts.Take(10).Select(t => (EventStep)new MessageStep { Text = t }).ToList(),
+        };
+        if (e.Steps.Count == 0) e.Steps.Add(new MessageStep { Text = "Hello!" });
+        e.Label = PoryscriptGenerator.SuggestLabel(map, "Event", _doc.Events.Select(x => x.Label).Concat(_existingLabels));
+        _doc.Events.Add(e);
+        Events.Add(e);
+        SelectedEvent = e;
+        DocumentChanged();
+        SelectedTab = 0;
+        Status = $"New event in {map} with {e.Steps.Count} text(s) of \"{title}\". Change it, then assign it to a person or sign.";
     }
 
     // ---- IToolkitModule
@@ -297,6 +331,7 @@ public sealed class EventsViewModel : ObservableObject, IToolkitModule
             var start = keep ?? _doc.Events.FirstOrDefault()?.Map;
             if (start != null && Maps.Contains(start)) SelectedMap = start;
             OnPropertyChanged(nameof(ManagedInfo));
+            _ = Existing.LoadAsync(root, SelectedMap);
             Status = $"{_doc.Events.Count} toolkit event(s) in project · {_symbols.Flags.Count} flags ({_symbols.Flags.Count(f => f.IsUnused)} free) · {_symbols.Items.Count} items · " +
                      (PoryscriptRunner.IsAvailable(root) ? "Poryscript found" : "tools/poryscript missing: check/save not possible");
             DocumentChanged(markDirty: false);

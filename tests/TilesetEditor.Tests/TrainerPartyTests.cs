@@ -284,6 +284,11 @@ public class TrainerPartyTests
         Assert.Equal(TrainerFormat.C, TrainerSource.Detect(root));
         File.Delete(Path.Combine(root, "include", "config", "general.h"));
         Assert.Equal(TrainerFormat.Party, TrainerSource.Detect(root)); // no setting, trainers.h empty
+        // expansion 1.13+: no setting, and the build has generated trainers.h from trainers.party – never edit that one.
+        var generated = "//\n// DO NOT MODIFY THIS FILE! It is auto-generated from src/data/trainers.party\n//\n" +
+            "const struct Trainer gTrainers[] = {\n    [TRAINER_A] =\n    {\n        .trainerName = _(\"A\"),\n        .partySize = 0,\n    },\n};\n";
+        File.WriteAllText(Path.Combine(root, "src", "data", "trainers.h"), generated);
+        Assert.Equal(TrainerFormat.Party, TrainerSource.Detect(root));
         File.WriteAllText(Path.Combine(root, "src", "data", "trainers.party"), "");
         Assert.Equal(TrainerFormat.C, TrainerSource.Detect(root));
     }

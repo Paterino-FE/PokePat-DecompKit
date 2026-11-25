@@ -28,7 +28,7 @@ public sealed class SpriteCheckResult
 
 /// <summary>
 /// Reads the overworld sprite registration of pokeemerald-expansion: graphics info pointers, graphics info structs,
-/// pic tables, pic/palette INCBINs and the palette tag table in src/event_object_movement.c.
+/// pic tables, pic/palette INCBINs (or INCGFX) and the palette tag table in src/event_object_movement.c.
 /// </summary>
 public static partial class OverworldSprites
 {
@@ -44,10 +44,6 @@ public static partial class OverworldSprites
 
     [GeneratedRegex(@"static\s+const\s+struct\s+SpriteFrameImage\s+(sPicTable_\w+)\[\]\s*=\s*\{(.*?)\};", RegexOptions.Singleline)]
     private static partial Regex PicTableRegex();
-
-    // Several files in one INCBIN (e.g. the player: walking.4bpp, running.4bpp) → the first file stands for the sprite.
-    [GeneratedRegex(@"(gObjectEvent(?:Pic|Pal)_\w+)\[\]\s*=\s*INCBIN_U\d+\(\s*""([^""]+)""")]
-    private static partial Regex IncbinRegex();
 
     [GeneratedRegex(@"\{\s*(gObjectEventPal_\w+)\s*,\s*(OBJ_EVENT_PAL_TAG_\w+)\s*\}")]
     private static partial Regex PalTagRegex();
@@ -65,8 +61,9 @@ public static partial class OverworldSprites
             .GroupBy(m => m.Groups[1].Value).ToDictionary(g => g.Key, g => g.First().Groups[2].Value);
         var picTables = PicTableRegex().Matches(Read([.. dir, "object_event_pic_tables.h"]))
             .GroupBy(m => m.Groups[1].Value).ToDictionary(g => g.Key, g => g.First().Groups[2].Value);
-        var incbins = IncbinRegex().Matches(Read([.. dir, "object_event_graphics.h"]))
-            .GroupBy(m => m.Groups[1].Value).ToDictionary(g => g.Key, g => g.First().Groups[2].Value);
+        // INCBIN or INCGFX (expansion 1.13+). Several files in one INCBIN (e.g. the player: walking.4bpp, running.4bpp) →
+        // the first file stands for the sprite.
+        var includes = Project.GraphicsIncludes.BySymbol(Read([.. dir, "object_event_graphics.h"]));
         var palByTag = PalTagRegex().Matches(Read("src", "event_object_movement.c"))
             .GroupBy(m => m.Groups[2].Value).ToDictionary(g => g.Key, g => g.First().Groups[1].Value);
 
@@ -83,8 +80,8 @@ public static partial class OverworldSprites
             string? pic = null;
             if (picTables.TryGetValue(F("images"), out var table) && Regex.Match(table, @"(gObjectEventPic_\w+)") is { Success: true } pm)
                 pic = pm.Groups[1].Value;
-            string? png = pic != null && incbins.TryGetValue(pic, out var path) ? Regex.Replace(path, @"\.4bpp(\.\w+)?$", ".png") : null;
-            string? pal = palByTag.TryGetValue(tag, out var palSym) && incbins.TryGetValue(palSym, out var pp) ? Regex.Replace(pp, @"\.gbapal(\.\w+)?$", ".pal") : null;
+            string? png = pic != null && includes.TryGetValue(pic, out var pi) && pi.SourcePath.EndsWith(".png", StringComparison.Ordinal) ? pi.SourcePath : null;
+            string? pal = palByTag.TryGetValue(tag, out var palSym) && includes.TryGetValue(palSym, out var pp) && pp.SourcePath.EndsWith(".pal", StringComparison.Ordinal) ? pp.SourcePath : null;
             result.Add(new OverworldSprite(gfx, infoSym, w, h, tag, pic, png, pal));
         }
         return result.GroupBy(s => s.GfxId).Select(g => g.First()).ToList();

@@ -77,7 +77,7 @@
                     <DataGrid.RowStyle>
                         <Style TargetType="DataGridRow">
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsChanged}" Value="True"><Setter Property="Background" Value="#FEF3C7"/></DataTrigger>
+                                <DataTrigger Binding="{Binding IsChanged}" Value="True"><Setter Property="Background" Value="{DynamicResource ChangedRowBrush}"/></DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </DataGrid.RowStyle>

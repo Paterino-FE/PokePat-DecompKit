@@ -1,0 +1,54 @@
+{
+  "id": "dialog-portraits",
+  "name": "Dialog portraits",
+  "version": "1.0.0",
+  "author": "PokePat",
+  "category": "Dialogs",
+  "description": "Shows a 64×64 picture of the person who speaks above the message box – like in many modern hacks. Portraits are added in PokePat from any PNG or from a trainer picture; the picture disappears by itself when the message box closes.",
+  "min_expansion": "1.8.0",
+  "files": [
+    {
+      "from": "files/src/dialog_portraits.c",
+      "to": "src/dialog_portraits.c"
+    },
+    {
+      "from": "files/include/dialog_portraits.h",
+      "to": "include/dialog_portraits.h"
+    },
+    {
+      "from": "files/include/constants/dialog_portraits.h",
+      "to": "include/constants/dialog_portraits.h"
+    },
+    {
+      "from": "files/src/data/dialog_portraits.h",
+      "to": "src/data/dialog_portraits.h"
+    }
+  ],
+  "edits": [
+    {
+      "file": "src/field_message_box.c",
+      "type": "insert_after",
+      "anchor": "#include \"field_message_box.h\"\n",
+      "text": "#include \"dialog_portraits.h\"\n"
+    },
+    {
+      "file": "src/field_message_box.c",
+      "type": "insert_after",
+      "anchor": "void HideFieldMessageBox(void)\n{\n    DestroyTask_DrawFieldMessage();\n",
+      "text": "    HidePortrait();\n"
+    },
+    {
+      "file": "data/specials.inc",
+      "type": "append",
+      "anchor": "",
+      "text": "\tdef_special ShowPortrait\n\tdef_special HidePortrait\n"
+    },
+    {
+      "file": "data/event_scripts.s",
+      "type": "insert_after",
+      "anchor": "#include \"constants/global.h\"\n",
+      "text": "#include \"constants/dialog_portraits.h\"\n"
+    }
+  ],
+  "usage": "In the event builder use the blocks \"Show portrait\" and \"Hide portrait\" (or in a script: setvar VAR_0x8004, PORTRAIT_X / special ShowPortrait). Add portraits under Mods → Dialog portraits."
+}

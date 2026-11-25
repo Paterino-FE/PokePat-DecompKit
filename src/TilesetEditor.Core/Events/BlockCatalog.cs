@@ -26,6 +26,8 @@ public enum ParamKind
     Macro,
     /// <summary>Free assembly argument (label, constant, expression).</summary>
     Free,
+    /// <summary>PORTRAIT_ constant of the "Dialog portraits" mod.</summary>
+    Portrait,
 }
 
 public sealed record BlockParam(string Key, string Label, ParamKind Kind, string Default = "", bool Optional = false,
@@ -60,6 +62,9 @@ public sealed class BlockDef
     public Func<BlockArgs, (IReadOnlyList<string> Options, bool CanCancel)>? Menu { get; init; }
     /// <summary>Text placed at top level of the script file (e.g. a mart list). The generator passes a unique "__name".</summary>
     public Func<BlockArgs, string>? TopLevel { get; init; }
+
+    /// <summary>Id of the PokePat mod the block needs (its commands only exist after installing it), or null.</summary>
+    public string? RequiresMod { get; init; }
 
     public bool IsBranch => Condition != null;
     public bool IsSwitch => Cases != null;
@@ -453,6 +458,27 @@ public static class BlockCatalog
                 Lines = a => [$"fadescreen({a["mode"]})"],
                 Summary = a => a["mode"],
                 Preview = a => [new(Log: $"Fade: {a["mode"]}")],
+            },
+
+            // ---------- Mod: Dialog portraits
+            new()
+            {
+                Id = "portrait_show", Category = "Dialog", Icon = "🖼", Title = "Show portrait",
+                Help = "Shows a picture of the speaker above the following messages (mod \"Dialog portraits\"). It disappears when the message box closes.",
+                RequiresMod = "dialog-portraits",
+                Params = [new("portrait", "Portrait", ParamKind.Portrait, "")],
+                Lines = a => [$"setvar(VAR_0x8004, {a["portrait"]})", "special(ShowPortrait)"],
+                Summary = a => a["portrait"].Replace("PORTRAIT_", ""),
+                Preview = a => [new(Log: $"Portrait {a["portrait"]}")],
+            },
+            new()
+            {
+                Id = "portrait_hide", Category = "Dialog", Icon = "🖼", Title = "Hide portrait",
+                Help = "Removes the portrait while the message box stays open (mod \"Dialog portraits\").",
+                RequiresMod = "dialog-portraits",
+                Lines = a => ["special(HidePortrait)"],
+                Summary = a => "",
+                Preview = a => [new(Log: "Portrait hidden")],
             },
 
             // ---------- Sound & Timing

@@ -8,9 +8,9 @@ public sealed class ProjectLoadException(string message) : Exception(message);
 
 /// <summary>
 /// Reads the parts of a pokeemerald(-expansion) project that matter for tilesets. The parsing follows
-/// what Porymap does: tileset structs from headers.h, INCBIN symbols resolved in the tileset data headers
+/// what Porymap does: tileset structs from headers.h, INCBIN/INCGFX symbols resolved in the tileset data headers
 /// (and src/graphics.c, where the expansion keeps the primary tilesets), .4bpp(.lz) mapped back to .png
-/// and .gbapal to .pal.
+/// and .gbapal to .pal (INCGFX names the .png/.pal directly).
 /// </summary>
 public static partial class ProjectLoader
 {
@@ -30,14 +30,9 @@ public static partial class ProjectLoader
     [GeneratedRegex(@"\.(\w+)\s*=\s*([^,}]+)")]
     private static partial Regex FieldRegex();
 
-    [GeneratedRegex(@"(?:const\s+)?u(8|16|32)\s+(\w+)\s*\[\s*\]\s*=\s*INC\w*\(\s*""([^""]+)""")]
-    private static partial Regex SingleIncbinRegex();
-
-    [GeneratedRegex(@"(?:const\s+)?u16\s+(\w+)\s*\[\s*\]\s*\[\s*16\s*\]\s*=\s*\{(.*?)\}\s*;", RegexOptions.Singleline)]
+    // const u16 gTilesetPalettes_X[][16] = { ... };   (expansion 1.13+: const u16 ALIGNED(4) gTilesetPalettes_X[][16])
+    [GeneratedRegex(@"(?:const\s+)?u16\s+(?:ALIGNED\s*\(\s*\d+\s*\)\s+)?(\w+)\s*\[\s*\]\s*\[\s*16\s*\]\s*=\s*\{(.*?)\}\s*;", RegexOptions.Singleline)]
     private static partial Regex PaletteArrayRegex();
-
-    [GeneratedRegex(@"""([^""]+)""")]
-    private static partial Regex StringLiteralRegex();
 
     [GeneratedRegex(@"metatileAttributes\s*;")]
     private static partial Regex AttrMemberRegex();
@@ -121,23 +116,25 @@ public static partial class ProjectLoader
         if (tilesets.Count == 0) throw new ProjectLoadException($"No tilesets found in '{HeadersFile}'.");
 
         // --- Symbols
-        var singles = new Dictionary<string, (string Path, string File, int Bits)>(StringComparer.Ordinal);
-        var paletteArrays = new Dictionary<string, (List<string> Paths, string File)>(StringComparer.Ordinal);
+        var singles = new Dictionary<string, (GraphicsInclude Include, string File, int Bits)>(StringComparer.Ordinal);
+        var paletteArrays = new Dictionary<string, (List<GraphicsInclude> Includes, string File)>(StringComparer.Ordinal);
+        bool incGfx = false;
         var known = new HashSet<string>(StringComparer.Ordinal);
         foreach (var t in tilesets) known.Add(t.Name);
         foreach (var file in SymbolFiles)
         {
             if (!fs.FileExists(file)) continue;
             string text = StripComments(fs.ReadAllText(file));
-            foreach (Match m in SingleIncbinRegex().Matches(text))
+            foreach (var decl in GraphicsIncludes.Declarations(text))
             {
-                singles.TryAdd(m.Groups[2].Value, (m.Groups[3].Value, file, int.Parse(m.Groups[1].Value)));
-                known.Add(m.Groups[2].Value);
+                singles.TryAdd(decl.Symbol, (decl.Include, file, decl.Bits));
+                known.Add(decl.Symbol);
+                incGfx |= decl.Include.IsIncGfx && file == GraphicsFile;
             }
             foreach (Match m in PaletteArrayRegex().Matches(text))
             {
-                var paths = StringLiteralRegex().Matches(m.Groups[2].Value).Select(s => s.Groups[1].Value).ToList();
-                paletteArrays.TryAdd(m.Groups[1].Value, (paths, file));
+                var includes = GraphicsIncludes.Includes(m.Groups[2].Value).ToList();
+                paletteArrays.TryAdd(m.Groups[1].Value, (includes, file));
                 known.Add(m.Groups[1].Value);
             }
         }
@@ -150,23 +147,23 @@ public static partial class ProjectLoader
         {
             if (t.TilesSymbol != null && singles.TryGetValue(t.TilesSymbol, out var tiles))
             {
-                t.TilesImagePath = ToPorymapImagePath(tiles.Path);
+                t.TilesImagePath = tiles.Include.SourcePath;
                 t.GraphicsDeclaredIn = tiles.File;
-                if (t.IsSecondary) tilesExts.Add(OutputExtension(tiles.Path, "tiles"));
+                if (t.IsSecondary) tilesExts.Add(tiles.Include.OutputExtension);
             }
             if (t.PalettesSymbol != null && paletteArrays.TryGetValue(t.PalettesSymbol, out var pals))
             {
-                t.PalettePaths.AddRange(pals.Paths.Select(ToPorymapPalettePath));
+                t.PalettePaths.AddRange(pals.Includes.Select(i => i.SourcePath));
                 if (t.IsSecondary)
                 {
-                    paletteCounts.Add(pals.Paths.Count);
-                    if (pals.Paths.Count > 0) palExts.Add(Path.GetExtension(pals.Paths[0]));
+                    paletteCounts.Add(pals.Includes.Count);
+                    if (pals.Includes.Count > 0) palExts.Add(pals.Includes[0].OutputExtension);
                 }
             }
-            if (t.MetatilesSymbol != null && singles.TryGetValue(t.MetatilesSymbol, out var mt)) t.MetatilesPath = mt.Path;
+            if (t.MetatilesSymbol != null && singles.TryGetValue(t.MetatilesSymbol, out var mt)) t.MetatilesPath = mt.Include.BuiltPath;
             if (t.AttributesSymbol != null && singles.TryGetValue(t.AttributesSymbol, out var at))
             {
-                t.AttributesPath = at.Path;
+                t.AttributesPath = at.Include.BuiltPath;
                 if (t.IsSecondary) attrDeclBits.Add(at.Bits);
             }
             if (!t.IsFullyResolved)
@@ -179,7 +176,8 @@ public static partial class ProjectLoader
             PaletteIncbinCount: MostCommon(paletteCounts, 16),
             TilesOutputExtension: MostCommon(tilesExts, ".4bpp.lz"),
             PalettesOutputExtension: MostCommon(palExts, ".gbapal"),
-            AttributeDeclarationBits: MostCommon(attrDeclBits, attrBits));
+            AttributeDeclarationBits: MostCommon(attrDeclBits, attrBits),
+            UsesIncGfx: incGfx);
 
         // --- Layouts
         var layouts = new List<LayoutInfo>();
@@ -249,26 +247,6 @@ public static partial class ProjectLoader
     {
         text = Regex.Replace(text, @"/\*.*?\*/", " ", RegexOptions.Singleline);
         return Regex.Replace(text, @"//[^\n]*", "");
-    }
-
-    /// <summary>data/.../tiles.4bpp.lz → data/.../tiles.png (also .4bpp, .4bpp.smol, .8bpp...).</summary>
-    public static string ToPorymapImagePath(string incbinPath)
-    {
-        var m = Regex.Match(incbinPath, @"^(.*)\.(?:4|8)bpp(?:\.\w+)?$");
-        return m.Success ? m.Groups[1].Value + ".png" : incbinPath;
-    }
-
-    /// <summary>data/.../00.gbapal(.lz) → data/.../00.pal</summary>
-    public static string ToPorymapPalettePath(string incbinPath)
-    {
-        var m = Regex.Match(incbinPath, @"^(.*)\.gbapal(?:\.\w+)?$");
-        return m.Success ? m.Groups[1].Value + ".pal" : incbinPath;
-    }
-
-    private static string OutputExtension(string path, string stem)
-    {
-        var file = Path.GetFileName(path);
-        return file.StartsWith(stem + ".", StringComparison.Ordinal) ? file[stem.Length..] : Path.GetExtension(file);
     }
 
     private static T MostCommon<T>(List<T> values, T fallback) where T : notnull =>

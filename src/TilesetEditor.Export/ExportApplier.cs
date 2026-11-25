@@ -29,7 +29,13 @@ public sealed class PhysicalExportFileSystem : IExportFileSystem
         if (Directory.Exists(path) && !Directory.EnumerateFileSystemEntries(path).Any()) Directory.Delete(path);
     }
 
-    public void Move(string source, string destination, bool overwrite) => File.Move(source, destination, overwrite);
+    public void Move(string source, string destination, bool overwrite)
+    {
+        // Replacing a file must not change its permissions (e.g. the executable bit some repositories have on sources).
+        UnixFileMode? mode = !OperatingSystem.IsWindows() && overwrite && File.Exists(destination) ? File.GetUnixFileMode(destination) : null;
+        File.Move(source, destination, overwrite);
+        if (mode is { } m) File.SetUnixFileMode(destination, m);
+    }
 }
 
 public sealed class ExportResult
@@ -66,7 +72,7 @@ public sealed class ExportApplier(IExportFileSystem? fileSystem = null, string? 
             var p = Full(f.RelativePath);
             if (f.Action == PlannedAction.Create && _fs.FileExists(p))
                 return new ExportResult { Success = false, Error = $"{f.RelativePath} now exists. Aborted, nothing was changed." };
-            if (f.Action == PlannedAction.Modify)
+            if (f.Action is PlannedAction.Modify or PlannedAction.Delete)
             {
                 if (!_fs.FileExists(p))
                     return new ExportResult { Success = false, Error = $"{f.RelativePath} is missing. Aborted, nothing was changed." };
@@ -84,7 +90,7 @@ public sealed class ExportApplier(IExportFileSystem? fileSystem = null, string? 
         var backups = new Dictionary<string, string>();
         try
         {
-            foreach (var f in plan.Modified)
+            foreach (var f in plan.Files.Where(f => f.Action != PlannedAction.Create))
             {
                 var b = ProjectPaths.Combine(backupDir, f.RelativePath);
                 _fs.CreateDirectory(Path.GetDirectoryName(b)!);
@@ -100,13 +106,19 @@ public sealed class ExportApplier(IExportFileSystem? fileSystem = null, string? 
         // 3. Write
         var createdDirs = new List<string>();
         var createdFiles = new List<string>();
-        var modifiedFiles = new List<string>();
+        var modifiedFiles = new List<string>(); // also deleted files: both are restored from the backup on rollback
         var tempFiles = new List<string>();
         try
         {
             foreach (var f in plan.Files)
             {
                 var p = Full(f.RelativePath);
+                if (f.Action == PlannedAction.Delete)
+                {
+                    modifiedFiles.Add(f.RelativePath);
+                    _fs.DeleteFile(p);
+                    continue;
+                }
                 EnsureDirectory(Path.GetDirectoryName(p)!, createdDirs);
                 var tmp = p + TempSuffix;
                 tempFiles.Add(tmp);
