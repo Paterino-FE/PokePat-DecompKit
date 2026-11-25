@@ -1,0 +1,9 @@
+# Copy to test-paths.local.txt (not committed) and point the keys at your checkouts.
+# Environment variables with the same names take precedence.
+#
+# A pokeemerald-expansion based project, read only (most tests read it):
+TILESETEDITOR_REFERENCE_PROJECT=C:\path\to\your\pokeemerald-expansion-project
+# Optional: upstream pokeemerald-expansion (tests for trainers.party; skipped when missing):
+TILESETEDITOR_EXPANSION_REFERENCE=C:\path\to\pokeemerald-expansion
+# Optional: a writable copy that may be built (tests that run Poryscript; fall back to fixtures):
+TILESETEDITOR_TEST_CHECKOUT=\\wsl.localhost\Ubuntu\home\you\test-checkout

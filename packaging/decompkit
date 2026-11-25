@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Tileset Toolkit (command line) – Linux launcher. Needs the .NET 8 runtime.
+here="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+if ! command -v dotnet >/dev/null 2>&1; then
+  echo "The .NET 8 runtime is missing. Install it, e.g. on Ubuntu/Debian: sudo apt install dotnet-runtime-8.0" >&2
+  echo "Other distributions: https://learn.microsoft.com/dotnet/core/install/linux" >&2
+  exit 1
+fi
+exec dotnet "$here/lib/tileset-editor-cli.dll" "$@"

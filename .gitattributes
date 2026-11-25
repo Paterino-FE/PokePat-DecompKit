@@ -1,0 +1,11 @@
+* text=auto
+*.cs      text eol=lf
+*.xaml    text eol=lf
+*.md      text eol=lf
+*.sh      text eol=lf
+*.ps1     text eol=crlf
+*.sln     text eol=crlf
+*.pal     text eol=crlf
+*.png     binary
+*.bin     binary
+*.gba     binary

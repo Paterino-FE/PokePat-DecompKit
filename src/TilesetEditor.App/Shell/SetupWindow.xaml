@@ -1,0 +1,76 @@
+<Window x:Class="TilesetEditor.App.Shell.SetupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PokéPat DecompKit – Setup" Width="760" SizeToContent="Height" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <Window.Resources>
+        <Style x:Key="Step" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,12,0,2"/>
+        </Style>
+        <Style x:Key="Status" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,2,0,0"/>
+        </Style>
+    </Window.Resources>
+    <StackPanel Margin="16">
+        <TextBlock Text="Welcome! Tell the toolkit where your project and tools are." FontSize="15" FontWeight="SemiBold"/>
+        <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,4,0,0"
+                   Text="Only the project folder is required. Every tool is optional – leave it empty (or press Skip) and set it later in the Project module."/>
+
+        <TextBlock Style="{StaticResource Step}" Text="1. Your pokeemerald-expansion project (required)"/>
+        <DockPanel>
+            <Button DockPanel.Dock="Right" Content="Browse…" Click="BrowseProject" Margin="6,0,0,0"/>
+            <TextBox x:Name="ProjectBox" TextChanged="Changed" AutomationProperties.Name="Project folder"
+                     ToolTip="The folder that contains the Makefile, e.g. \\wsl.localhost\Ubuntu\home\you\pokeemerald-expansion"/>
+        </DockPanel>
+        <TextBlock x:Name="ProjectStatus" Style="{StaticResource Status}"/>
+
+        <TextBlock Style="{StaticResource Step}" Text="2. How the ROM is built"/>
+        <StackPanel Orientation="Horizontal">
+            <ComboBox x:Name="BuildEnvBox" Width="300" SelectionChanged="Changed" AutomationProperties.Name="Build environment">
+                <ComboBoxItem Tag="Wsl" Content="WSL (Linux inside Windows) – recommended"/>
+                <ComboBoxItem Tag="Windows" Content="Windows (cmd, e.g. MSYS2/devkitPro on PATH)"/>
+            </ComboBox>
+            <TextBlock Text="WSL distribution:" VerticalAlignment="Center" Margin="12,0,6,0"/>
+            <TextBox x:Name="DistroBox" Width="120" Text="Ubuntu" AutomationProperties.Name="WSL distribution"/>
+        </StackPanel>
+        <DockPanel Margin="0,4,0,0">
+            <TextBlock Text="Build command:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBox x:Name="BuildCommandBox" FontFamily="Consolas" AutomationProperties.Name="Build command"/>
+        </DockPanel>
+
+        <TextBlock Style="{StaticResource Step}" Text="3. Porymap (optional – map editor, opened from the toolkit)"/>
+        <DockPanel>
+            <Button DockPanel.Dock="Right" Content="Skip" Tag="Porymap" Click="Skip" Margin="4,0,0,0"/>
+            <Button DockPanel.Dock="Right" Content="Browse…" Tag="Porymap" Click="BrowseExe" Margin="6,0,0,0"/>
+            <TextBox x:Name="PorymapBox" TextChanged="Changed" AutomationProperties.Name="Porymap path"/>
+        </DockPanel>
+        <TextBlock x:Name="PorymapStatus" Style="{StaticResource Status}"/>
+
+        <TextBlock Style="{StaticResource Step}" Text="4. Emulator (optional – e.g. mGBA, to start the built ROM)"/>
+        <DockPanel>
+            <Button DockPanel.Dock="Right" Content="Skip" Tag="Emulator" Click="Skip" Margin="4,0,0,0"/>
+            <Button DockPanel.Dock="Right" Content="Browse…" Tag="Emulator" Click="BrowseExe" Margin="6,0,0,0"/>
+            <TextBox x:Name="EmulatorBox" TextChanged="Changed" AutomationProperties.Name="Emulator path"/>
+        </DockPanel>
+        <TextBlock x:Name="EmulatorStatus" Style="{StaticResource Status}"/>
+
+        <TextBlock Style="{StaticResource Step}" Text="5. Porytiles (optional – only for importing tilesets)"/>
+        <StackPanel Orientation="Horizontal">
+            <ComboBox x:Name="PorytilesModeBox" Width="300" SelectionChanged="Changed" AutomationProperties.Name="Porytiles mode">
+                <ComboBoxItem Tag="Wsl" Content="Linux binary inside WSL (recommended)"/>
+                <ComboBoxItem Tag="Native" Content="Program on this computer"/>
+            </ComboBox>
+            <Button Content="Skip" Tag="Porytiles" Click="Skip" Margin="6,0,0,0"/>
+        </StackPanel>
+        <TextBox x:Name="PorytilesBox" TextChanged="Changed" FontFamily="Consolas" Margin="0,4,0,0" AutomationProperties.Name="Porytiles path"
+                 ToolTip="WSL: Linux path, ~ allowed. tools/setup-porytiles.ps1 installs the pinned version 2.0.0 there."/>
+        <TextBlock x:Name="PorytilesStatus" Style="{StaticResource Status}"/>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button x:Name="FinishButton" Content="Finish and open project" IsDefault="True" Click="Finish" MinWidth="170" FontWeight="SemiBold" Margin="0,0,8,0"/>
+            <Button Content="Cancel" IsCancel="True" MinWidth="80"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

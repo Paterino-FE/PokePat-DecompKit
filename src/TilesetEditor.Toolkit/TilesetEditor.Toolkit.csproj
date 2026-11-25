@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Shared toolkit services used by the shell and several modules: tool settings, project environment
+       detection (branch, ROM name), ROM build runner, Porymap/emulator hand-off. No UI. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>TilesetEditor.Toolkit</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\TilesetEditor.Core\TilesetEditor.Core.csproj" />
+    <ProjectReference Include="..\TilesetEditor.Compiler\TilesetEditor.Compiler.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="TilesetEditor.Tests" />
+  </ItemGroup>
+</Project>

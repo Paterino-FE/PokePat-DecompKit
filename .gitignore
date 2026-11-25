@@ -1,0 +1,27 @@
+# Build output
+bin/
+obj/
+artifacts/
+TestResults/
+
+# Release packages (built with release.ps1, uploaded separately as GitHub release assets)
+dist/
+*.zip
+*.tar.gz
+
+# IDE / user files
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local machine configuration (personal paths)
+test-paths.local.txt
+docs/OFFEN.md
+
+# Downloaded tools (setup-porytiles.ps1 installs into WSL, nothing belongs here)
+tools/downloads/

@@ -1,0 +1,56 @@
+error [tile-color-count-violation]:
+│
+│ metatile 0x8(8)|middle|northeast(1)|1,7: found 16th unique tile color: 60 43 85
+│ 
+│                  ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+│                                  
+│                                XX
+│                                  
+│                                  
+│                                  
+│                                  
+│                                  
+│                                  
+│ 
+│                                  
+│                                  
+│                                  
+│                                  
+│                                  
+│                                  
+│                                  
+│                                  
+│ 
+│
+note [tile-color-count-violation]:
+│
+│ color counts:
+│ 0 0 0 ➞ 1 pixel(s)
+│ 4 37 91 ➞ 1 pixel(s)
+│ 8 74 182 ➞ 1 pixel(s)
+│ 12 111 17 ➞ 1 pixel(s)
+│ 16 148 108 ➞ 1 pixel(s)
+│ 20 185 199 ➞ 1 pixel(s)
+│ 24 222 34 ➞ 1 pixel(s)
+│ 28 3 125 ➞ 1 pixel(s)
+│ 32 40 216 ➞ 1 pixel(s)
+│ 36 77 51 ➞ 1 pixel(s)
+│ 40 114 142 ➞ 1 pixel(s)
+│ 44 151 233 ➞ 1 pixel(s)
+│ 48 188 68 ➞ 1 pixel(s)
+│ 52 225 159 ➞ 1 pixel(s)
+│ 56 6 250 ➞ 1 pixel(s)
+│ 60 43 85 ➞ 1 pixel(s)
+│
+fatal:
+│
+│ Failed to compile tileset 'gTileset_TestTown'.
+│
+├ caused by:
+│ 
+│ Compilation job failed for 'gTileset_TestTown'.
+│
+├ root cause:
+│ 
+│ Found tile(s) with more than 15 unique non-transparent pixels.
+│

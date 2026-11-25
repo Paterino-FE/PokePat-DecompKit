@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net8.0-windows7.0": {
+      "tileseteditor.compiler": {
+        "type": "Project",
+        "dependencies": {
+          "TilesetEditor.Core": "[0.1.0, )"
+        }
+      },
+      "tileseteditor.core": {
+        "type": "Project"
+      },
+      "tileseteditor.export": {
+        "type": "Project",
+        "dependencies": {
+          "TilesetEditor.Core": "[0.1.0, )"
+        }
+      },
+      "tileseteditor.toolkit": {
+        "type": "Project",
+        "dependencies": {
+          "TilesetEditor.Compiler": "[0.1.0, )",
+          "TilesetEditor.Core": "[0.1.0, )"
+        }
+      }
+    },
+    "net8.0-windows7.0/win-x64": {}
+  }
+}

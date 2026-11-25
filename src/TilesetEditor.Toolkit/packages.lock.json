@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net8.0": {
+      "tileseteditor.compiler": {
+        "type": "Project",
+        "dependencies": {
+          "TilesetEditor.Core": "[0.1.0, )"
+        }
+      },
+      "tileseteditor.core": {
+        "type": "Project"
+      }
+    },
+    "net8.0/win-x64": {}
+  }
+}

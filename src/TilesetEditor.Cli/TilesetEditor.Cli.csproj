@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Headless front end over the same libraries as the WPF app. Used for automation and the
+       end-to-end test against a separate test checkout. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>TilesetEditor.Cli</RootNamespace>
+    <AssemblyName>tileset-editor-cli</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\TilesetEditor.Core\TilesetEditor.Core.csproj" />
+    <ProjectReference Include="..\TilesetEditor.Compiler\TilesetEditor.Compiler.csproj" />
+    <ProjectReference Include="..\TilesetEditor.Export\TilesetEditor.Export.csproj" />
+    <ProjectReference Include="..\TilesetEditor.Toolkit\TilesetEditor.Toolkit.csproj" />
+  </ItemGroup>
+</Project>

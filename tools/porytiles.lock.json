@@ -1,0 +1,10 @@
+{
+  "comment": "Pinned Porytiles release used by the Tileset Toolkit. Changing it requires re-running the integration tests (build.ps1 -IntegrationTests).",
+  "version": "2.0.0",
+  "asset": "porytiles-linux-amd64.zip",
+  "url": "https://github.com/grunt-lucas/porytiles/releases/download/v2.0.0/porytiles-linux-amd64.zip",
+  "sha256": "68C904C3FF707ED2D6DE0372073F165E627EC3EE7855EEDBB3363184CC9212A4",
+  "wsl_install_dir": "~/.local/share/tileseteditor/porytiles-2.0.0",
+  "executable": "~/.local/share/tileseteditor/porytiles-2.0.0/porytiles-linux-amd64/porytiles",
+  "note": "Porytiles 2.x ships no Windows binary; the toolkit runs the Linux build through WSL."
+}

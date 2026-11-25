@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>TilesetEditor.App</RootNamespace>
+    <AssemblyName>TilesetEditor</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\decompkit.ico</ApplicationIcon>
+    <Product>PokéPat DecompKit</Product>
+    <AssemblyTitle>PokéPat DecompKit</AssemblyTitle>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\TilesetEditor.Core\TilesetEditor.Core.csproj" />
+    <ProjectReference Include="..\TilesetEditor.Compiler\TilesetEditor.Compiler.csproj" />
+    <ProjectReference Include="..\TilesetEditor.Export\TilesetEditor.Export.csproj" />
+    <ProjectReference Include="..\TilesetEditor.Toolkit\TilesetEditor.Toolkit.csproj" />
+  </ItemGroup>
+</Project>

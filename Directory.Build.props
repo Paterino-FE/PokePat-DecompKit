@@ -1,0 +1,23 @@
+<Project>
+  <!-- Shared settings for all projects. Keep builds reproducible: deterministic output,
+       no machine-specific paths in PDBs, pinned SDK via global.json, locked NuGet graph. -->
+  <PropertyGroup>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true' or '$(Configuration)' == 'Release'">true</ContinuousIntegrationBuild>
+    <PathMap>$(MSBuildThisFileDirectory)=/src/</PathMap>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningLevel>4</WarningLevel>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- Same RID set for build and publish, so the locked restore is identical in both. -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <RestoreConfigFile>$(MSBuildThisFileDirectory)nuget.config</RestoreConfigFile>
+    <Version>0.1.0</Version>
+    <Company>PokéPat DecompKit</Company>
+    <Product>PokéPat DecompKit for pokeemerald-expansion</Product>
+    <NeutralLanguage>en</NeutralLanguage>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,23 @@
+---------------------------------
+|             PANIC             |
+---------------------------------
+palette_packer.cpp:100: palette color [255, 0, 255, 255] at slot 3 not in color map
+
+Stack trace (most recent call first):
+#0  (inlined)          in [33m(anonymous namespace)::build_color_set_from_palette(porytiles::Palette<porytiles::Rgba32, 16ul> const&, porytiles::ColorIndexMap<porytiles::Rgba32> const&)[0m at [32m/home/runner/work/porytiles/porytiles/porytiles/lib/domain/packing/services/palette_packer.cpp[0m:[34m100[0m:[34m13[0m
+#1  (inlined)          in [33m(anonymous namespace)::build_packing_inputs(porytiles::PackingParams const&)[0m at [32m/home/runner/work/porytiles/porytiles/porytiles/lib/domain/packing/services/palette_packer.cpp[0m:[34m343[0m:[34m13[0m
+#2  [34m0x00000000007a8301[0m in [33mporytiles::PalettePacker::pack_tiles(porytiles::PackingParams const&) const[0m at [32m/home/runner/work/porytiles/porytiles/porytiles/lib/domain/packing/services/palette_packer.cpp[0m:[34m1183[0m:[34m60[0m
+#3  [34m0x00000000004d79a2[0m in [33m(anonymous namespace)::CompilerTask::pipeline_helper_run_palette_packing()[0m at [32m/home/runner/work/porytiles/porytiles/porytiles/lib/domain/services/tileset_compiler.cpp[0m:[34m1308[0m:[34m24[0m
+#4  [34m0x00000000004c8fb4[0m in [33m(anonymous namespace)::CompilerTask::pipeline_step_setup_working_data()[0m at [32m/home/runner/work/porytiles/porytiles/porytiles/lib/domain/services/tileset_compiler.cpp[0m:[34m721[0m:[34m30[0m
+#5  [34m0x00000000004bf7c1[0m in [33m(anonymous namespace)::CompilerTask::run()[0m at [32m/home/runner/work/porytiles/porytiles/porytiles/lib/domain/services/tileset_compiler.cpp[0m:[34m470[0m:[34m26[0m
+#6  [34m0x00000000004be7ad[0m in [33mporytiles::TilesetCompiler::compile(porytiles::Tileset const&, bool, porytiles::Tileset const*) const[0m at [32m/home/runner/work/porytiles/porytiles/porytiles/lib/domain/services/tileset_compiler.cpp[0m:[34m2520[0m:[34m17[0m
+#7  [34m0x0000000000487add[0m in [33mporytiles::CreateSecondaryTileset::create(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&) const[0m at [32m/home/runner/work/porytiles/porytiles/porytiles/lib/app/use_cases/create_secondary_tileset.cpp[0m:[34m71[0m:[34m20[0m
+#8  [34m0x000000000042f32e[0m in [33mCreateTilesetCommand::Run()[0m at [32m/home/runner/work/porytiles/porytiles/porytiles/tools/driver/command_create_tileset.hpp[0m:[34m84[0m:[34m45[0m
+#9  [34m0x000000000045d4d2[0m in [33mCLI::App::run_callback(bool, bool)[0m at [32m/home/runner/work/porytiles/porytiles/build/_deps/cli11_proj-src/include/CLI/impl/App_inl.hpp[0m:[34m1047[0m:[34m19[0m
+#10 [34m0x000000000045cca2[0m in [33mCLI::App::parse(std::__1::vector<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>>, std::__1::allocator<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>>>>&&)[0m at [32m/home/runner/work/porytiles/porytiles/build/_deps/cli11_proj-src/include/CLI/impl/App_inl.hpp[0m:[34m660[0m:[34m5[0m
+#11 [34m0x000000000045cb46[0m in [33mvoid CLI::App::parse_char_t<char>(int, char const* const*)[0m at [32m/home/runner/work/porytiles/porytiles/build/_deps/cli11_proj-src/include/CLI/impl/App_inl.hpp[0m:[34m587[0m:[34m5[0m
+#12 (inlined)          in [33mCLI::App::parse(int, char const* const*)[0m at [32m/home/runner/work/porytiles/porytiles/build/_deps/cli11_proj-src/include/CLI/impl/App_inl.hpp[0m:[34m564[0m:[34m67[0m
+#13 [34m0x000000000040760f[0m in [33mmain[0m at [32m/home/runner/work/porytiles/porytiles/porytiles/tools/driver/main.cpp[0m:[34m83[0m:[34m5[0m
+#14 [34m0x000000000097db37[0m at [32m/home/user/.local/share/tileseteditor/porytiles-2.0.0/porytiles-linux-amd64/porytiles[0m
+#15 [34m0x000000000097fcff[0m at [32m/home/user/.local/share/tileseteditor/porytiles-2.0.0/porytiles-linux-amd64/porytiles[0m
+#16 [34m0x0000000000406e64[0m at [32m/home/user/.local/share/tileseteditor/porytiles-2.0.0/porytiles-linux-amd64/porytiles[0m
