@@ -19,6 +19,10 @@ public sealed partial class GameText
 {
     private readonly Charmap? _charmap;
     private readonly Dictionary<string, int> _placeholderBytes = new(StringComparer.Ordinal);
+    /// <summary>Platinum (tools/msgenc/charmap.txt): the characters the font knows; null for Emerald.</summary>
+    private HashSet<string>? _nitroChars;
+    /// <summary>The letters allowed after a backslash: Emerald \n \l \p, Platinum \n \r (new box) \f (scroll).</summary>
+    private string _controls = "nlp";
 
     [GeneratedRegex(@"^([A-Z_][A-Z0-9_]*)\s*=\s*((?:[0-9A-Fa-f]{2}\s*)+)(?:@.*)?$")]
     private static partial Regex NameLine();
@@ -40,7 +44,35 @@ public sealed partial class GameText
         return new GameText(File.Exists(path) ? File.ReadAllText(path) : null);
     }
 
-    public bool HasCharmap => _charmap != null;
+    public bool HasCharmap => _charmap != null || _nitroChars != null;
+
+    /// <summary>
+    /// Text checks for pokeplatinum: the characters of tools/msgenc/charmap.txt ("HEX=char" lines), {COMMANDS} as they are,
+    /// and the control codes \n (new line), \r (new box) and \f (scroll).
+    /// </summary>
+    public static GameText ForPlatinum(string? charmapText)
+    {
+        var t = new GameText(null) { _controls = "nrf" };
+        if (charmapText == null) return t;
+        var chars = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var raw in charmapText.Split('\n'))
+        {
+            var line = raw.TrimEnd('\r');
+            int eq = line.IndexOf('=');
+            if (eq != 4 || line.StartsWith("//", StringComparison.Ordinal)) continue;
+            var value = line[(eq + 1)..];
+            if (value.Length == 0 || value.StartsWith('{') || value.StartsWith('\\')) continue;
+            chars.Add(value);
+        }
+        t._nitroChars = chars;
+        return t;
+    }
+
+    public static GameText LoadPlatinum(string root)
+    {
+        var path = Path.Combine(root, "tools", "msgenc", "charmap.txt");
+        return ForPlatinum(File.Exists(path) ? File.ReadAllText(path) : null);
+    }
 
     /// <summary>Units of a text: single characters, "\n"-style control codes and "{NAME}" placeholders.</summary>
     public static List<string> Units(string s)
@@ -79,12 +111,21 @@ public sealed partial class GameText
             if (u == "$") return new TextCheck("The character $ ends the text in-game and is not allowed.", null);
             if (u.StartsWith('\\') && u.Length == 2)
             {
-                if (u[1] is not ('n' or 'l' or 'p')) return new TextCheck($"Unknown control code {u}. Allowed are \\n (new line), \\l (scroll) and \\p (new box).", null);
-                if (!allowLineBreaks) return new TextCheck("Line breaks (\\n, \\l, \\p) are not allowed here.", null);
+                if (!_controls.Contains(u[1]))
+                    return new TextCheck(_controls == "nrf"
+                        ? $"Unknown control code {u}. Allowed are \\n (new line), \\r (new box) and \\f (scroll)."
+                        : $"Unknown control code {u}. Allowed are \\n (new line), \\l (scroll) and \\p (new box).", null);
+                if (!allowLineBreaks) return new TextCheck(_controls == "nrf" ? "Line breaks (\\n, \\r, \\f) are not allowed here." : "Line breaks (\\n, \\l, \\p) are not allowed here.", null);
                 continue;
             }
             if (u == "\\") return new TextCheck("A single backslash is not allowed.", null);
             if (u is "\n" or "\r") return new TextCheck("Use \\n for a line break.", null);
+            if (_nitroChars != null)
+            {
+                if (u.Length > 2 && u.StartsWith('{') && u.EndsWith('}')) continue;
+                if (!_nitroChars.Contains(u)) unknown.Add(u);
+                continue;
+            }
             if (_charmap == null) continue;
             if (u.Length > 2 && u.StartsWith('{') && u.EndsWith('}'))
             {
@@ -94,7 +135,7 @@ public sealed partial class GameText
             if (!_charmap.HasChar(u)) unknown.Add(u);
         }
         if (unknown.Count > 0)
-            return new TextCheck("The game font has no " + string.Join(" ", unknown.Select(u => "'" + u + "'")) + " (not in charmap.txt).", null);
+            return new TextCheck("The game font has no " + string.Join(" ", unknown.Select(u => "'" + u + "'")) + (_nitroChars != null ? " (not in tools/msgenc/charmap.txt)." : " (not in charmap.txt)."), null);
         if (maxLength > 0)
         {
             int len = ByteLength(text);

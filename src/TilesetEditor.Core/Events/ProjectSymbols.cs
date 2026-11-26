@@ -37,6 +37,8 @@ public sealed partial class ProjectSymbols
     public IReadOnlyList<string> Sounds { get; init; } = [];
     /// <summary>PORTRAIT_ constants of the "Dialog portraits" mod (empty if it is not installed).</summary>
     public IReadOnlyList<string> Portraits { get; init; } = [];
+    /// <summary>PICTURE_ constants of the "Dialog portraits" mod 1.1+ (empty if not installed).</summary>
+    public IReadOnlyList<string> Pictures { get; init; } = [];
     public IReadOnlyList<string> MovementActions { get; init; } = [];
     public IReadOnlyList<string> Specials { get; init; } = [];
     public IReadOnlyList<string> Weathers { get; init; } = [];
@@ -106,7 +108,8 @@ public sealed partial class ProjectSymbols
             Maps = maps.OrderBy(m => m, StringComparer.Ordinal).ToList(),
             Music = Defines(songs, "MUS_"),
             Sounds = Defines(songs, "SE_"),
-            Portraits = Defines(Read("include", "constants", "dialog_portraits.h"), "PORTRAIT_", "PORTRAIT_NONE"),
+            Portraits = Defines(Read("include", "constants", "dialog_portraits.h"), "PORTRAIT_", "PORTRAIT_NONE", "PORTRAIT_POS_"),
+            Pictures = Defines(Read("include", "constants", "dialog_portraits.h"), "PICTURE_", "PICTURE_NONE"),
             MovementActions = MovementAction().Matches(Read("asm", "macros", "movement.inc")).Select(m => m.Groups[1].Value)
                 .Where(n => n != "name").Distinct().ToList(),
             Specials = SpecialDef().Matches(Read("data", "specials.inc")).Select(m => m.Groups[1].Value).Distinct().ToList(),

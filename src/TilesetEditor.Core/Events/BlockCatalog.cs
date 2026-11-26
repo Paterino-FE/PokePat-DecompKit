@@ -28,6 +28,8 @@ public enum ParamKind
     Free,
     /// <summary>PORTRAIT_ constant of the "Dialog portraits" mod.</summary>
     Portrait,
+    /// <summary>PICTURE_ constant of the "Dialog portraits" mod (1.1+).</summary>
+    Picture,
 }
 
 public sealed record BlockParam(string Key, string Label, ParamKind Kind, string Default = "", bool Optional = false,
@@ -95,6 +97,7 @@ public static class BlockCatalog
     public const string MacroBlockId = "macro";
 
     private static readonly string[] StrVars = ["STR_VAR_1", "STR_VAR_2", "STR_VAR_3"];
+    private static readonly string[] PortraitSides = ["PORTRAIT_POS_LEFT", "PORTRAIT_POS_RIGHT", "PORTRAIT_POS_LEFT_MIRRORED", "PORTRAIT_POS_RIGHT_MIRRORED"];
     private static readonly string[] Directions = ["DIR_SOUTH", "DIR_NORTH", "DIR_WEST", "DIR_EAST"];
     private static readonly string[] Fades = ["FADE_TO_BLACK", "FADE_FROM_BLACK", "FADE_TO_WHITE", "FADE_FROM_WHITE"];
     private static readonly string[] Emotes = ["emote_exclamation_mark", "emote_question_mark", "emote_heart", "emote_x", "emote_double_exclamation_mark"];
@@ -466,9 +469,13 @@ public static class BlockCatalog
                 Id = "portrait_show", Category = "Dialog", Icon = "🖼", Title = "Show portrait",
                 Help = "Shows a picture of the speaker above the following messages (mod \"Dialog portraits\"). It disappears when the message box closes.",
                 RequiresMod = "dialog-portraits",
-                Params = [new("portrait", "Portrait", ParamKind.Portrait, "")],
-                Lines = a => [$"setvar(VAR_0x8004, {a["portrait"]})", "special(ShowPortrait)"],
-                Summary = a => a["portrait"].Replace("PORTRAIT_", ""),
+                Params = [new("portrait", "Portrait", ParamKind.Portrait, ""),
+                          new("side", "Where", ParamKind.Choice, "PORTRAIT_POS_LEFT", Choices: PortraitSides,
+                              Help: "Left or right of the message box; MIRRORED turns the picture so the person looks the other way. Needs mod version 1.1 for anything but left.")],
+                Lines = a => a["side"] == "PORTRAIT_POS_LEFT"
+                    ? [$"setvar(VAR_0x8004, {a["portrait"]})", "special(ShowPortrait)"]
+                    : [$"setvar(VAR_0x8004, {a["portrait"]})", $"setvar(VAR_0x8005, {a["side"]})", "special(ShowPortraitAt)"],
+                Summary = a => a["portrait"].Replace("PORTRAIT_", "") + (a["side"] == "PORTRAIT_POS_LEFT" ? "" : " · " + a["side"].Replace("PORTRAIT_POS_", "").Replace('_', ' ').ToLowerInvariant()),
                 Preview = a => [new(Log: $"Portrait {a["portrait"]}")],
             },
             new()
@@ -479,6 +486,25 @@ public static class BlockCatalog
                 Lines = a => ["special(HidePortrait)"],
                 Summary = a => "",
                 Preview = a => [new(Log: "Portrait hidden")],
+            },
+            new()
+            {
+                Id = "picture_show", Category = "Dialog", Icon = "🗺", Title = "Show picture",
+                Help = "Shows a bigger picture (up to 128×96, e.g. a map or a letter) in the middle of the screen (mod \"Dialog portraits\" 1.1). It disappears when the message box closes.",
+                RequiresMod = "dialog-portraits",
+                Params = [new("picture", "Picture", ParamKind.Picture, "")],
+                Lines = a => [$"setvar(VAR_0x8004, {a["picture"]})", "special(ShowPicture)"],
+                Summary = a => a["picture"].Replace("PICTURE_", ""),
+                Preview = a => [new(Log: $"Picture {a["picture"]}")],
+            },
+            new()
+            {
+                Id = "picture_hide", Category = "Dialog", Icon = "🗺", Title = "Hide picture",
+                Help = "Removes the picture while the message box stays open (mod \"Dialog portraits\" 1.1).",
+                RequiresMod = "dialog-portraits",
+                Lines = a => ["special(HidePicture)"],
+                Summary = a => "",
+                Preview = a => [new(Log: "Picture hidden")],
             },
 
             // ---------- Sound & Timing

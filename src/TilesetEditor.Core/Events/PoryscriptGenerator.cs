@@ -248,6 +248,11 @@ public static partial class PoryscriptGenerator
                         problems.Add(new(true, who, $"{block}: needs the mod \"Dialog portraits\" with at least one portrait (Mods module)."));
                     else Known(symbols?.Portraits, "Portrait");
                     break;
+                case ParamKind.Picture:
+                    if (symbols != null && symbols.Pictures.Count == 0)
+                        problems.Add(new(true, who, $"{block}: needs the mod \"Dialog portraits\" (version 1.1) with at least one picture (Mods module)."));
+                    else Known(symbols?.Pictures, "Picture");
+                    break;
                 case ParamKind.Choice:
                     if (p.Choices != null && !p.Choices.Contains(v)) problems.Add(new(true, who, $"{block}: \"{v}\" is not allowed for \"{p.Label}\"."));
                     break;

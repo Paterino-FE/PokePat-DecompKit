@@ -69,10 +69,15 @@ public static class GameGraphics
     private static string Title(string folder) =>
         string.Join(" ", folder.Split('_', StringSplitOptions.RemoveEmptyEntries).Select(w => char.ToUpperInvariant(w[0]) + w[1..]));
 
-    public static List<string> Files(string root, string folderRel) =>
-        Directory.EnumerateFiles(Path.Combine(root, folderRel.Replace('/', Path.DirectorySeparatorChar)), "*.png", SearchOption.AllDirectories)
+    /// <summary>PNGs of a folder (empty if the folder does not exist – e.g. right after another project was opened).</summary>
+    public static List<string> Files(string root, string folderRel)
+    {
+        var dir = Path.Combine(root, folderRel.Replace('/', Path.DirectorySeparatorChar));
+        if (!Directory.Exists(dir)) return [];
+        return Directory.EnumerateFiles(dir, "*.png", SearchOption.AllDirectories)
             .Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))
             .OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
+    }
 
     public static GraphicInfo Inspect(string root, string rel, PngImage png)
     {

@@ -19,7 +19,15 @@ public enum GameDataComposite
     AbilityList,
 }
 
-public enum GameDataSource { CTable, MapSectionsJson }
+public enum GameDataSource
+{
+    CTable,
+    MapSectionsJson,
+    /// <summary>pokeplatinum: one JSON file per entry (res/pokemon/*/data.json, res/items/data/*.json …).</summary>
+    JsonFiles,
+    /// <summary>pokeplatinum: a text bank (res/text/*.json), one message per entry.</summary>
+    TextBank,
+}
 
 /// <summary>A column of a game data table: which field, how it is shown and which values are allowed.</summary>
 public sealed record GameDataColumn(string Header, string Field, GameDataKind Kind)
@@ -52,6 +60,10 @@ public sealed record GameDataColumn(string Header, string Field, GameDataKind Ki
     public string? MissingNote { get; init; }
     public double Width { get; init; } = 110;
     public string? Hint { get; init; }
+    /// <summary>pokeplatinum: the value is a JSON boolean (true/false) instead of a string.</summary>
+    public bool JsonBool { get; init; }
+    /// <summary>pokeplatinum: a text bank (project-relative) this column reads from instead of the row's file.</summary>
+    public string? SourceFile { get; init; }
 }
 
 /// <summary>A game data table: source file(s), table variable, key prefix and columns.</summary>
@@ -81,6 +93,8 @@ public sealed class GameDataRow
     public int Line { get; init; }
     public required GameDataCell[] Cells { get; init; }
     public string? ReadOnlyReason { get; set; }
+    /// <summary>pokeplatinum text banks: the JSON path of the row's message ("messages[12]."), put before each column's field.</summary>
+    public string PathPrefix { get; init; } = "";
     /// <summary>Field id → raw value as read (null = field missing), the precondition for writing.</summary>
     public Dictionary<string, string?> FieldRaw { get; } = [];
     public bool IsChanged => Cells.Any(c => c.IsChanged);
