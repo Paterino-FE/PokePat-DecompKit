@@ -134,6 +134,8 @@ public sealed class CommandEditorVm : StepEditor
         ParamKind.Sound => _symbols.Sounds,
         ParamKind.Weather => _symbols.Weathers,
         ParamKind.Special => _symbols.Specials,
+        ParamKind.Portrait => _symbols.Portraits,
+        ParamKind.Picture => _symbols.Pictures,
         ParamKind.Target => _targets,
         ParamKind.Choice => p?.Choices ?? [],
         ParamKind.Macro => _symbols.Macros.Select(m => m.Name).ToList(),

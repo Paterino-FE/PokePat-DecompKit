@@ -26,9 +26,15 @@ public sealed class TilesetData
 
     /// <summary>Loads tiles.png, palettes/NN.pal, metatiles.bin and metatile_attributes.bin.</summary>
     public static TilesetData Load(string name, string tilesPng, IReadOnlyList<string> palettePaths, string metatilesBin,
-        string attributesBin, int tilesPerMetatile, int attributeSize)
+        string attributesBin, int tilesPerMetatile, int attributeSize) =>
+        FromBytes(name, File.ReadAllBytes(tilesPng), palettePaths.Select(p => File.Exists(p) ? JascPalette.Load(p) : new Rgba32[16]).ToList(),
+            File.ReadAllBytes(metatilesBin), File.ReadAllBytes(attributesBin), tilesPerMetatile, attributeSize, tilesPng, metatilesBin, attributesBin);
+
+    /// <summary>The same from file contents (e.g. a planned import that is not written yet).</summary>
+    public static TilesetData FromBytes(string name, byte[] tilesPngBytes, IReadOnlyList<Rgba32[]> palettesIn, byte[] mt, byte[] at,
+        int tilesPerMetatile, int attributeSize, string tilesPng = "tiles.png", string metatilesBin = "metatiles.bin", string attributesBin = "metatile_attributes.bin")
     {
-        var png = Png.Load(tilesPng);
+        var png = Png.Decode(tilesPngBytes);
         if (!png.IsIndexed || png.Indices == null)
             throw new FormatException($"'{tilesPng}' is not an indexed PNG.");
         if (png.Width % TileSize != 0 || png.Height % TileSize != 0)
@@ -36,20 +42,18 @@ public sealed class TilesetData
         var tiles = SliceTiles(png.Width, png.Height, png.Indices);
 
         var palettes = new List<Rgba32[]>();
-        foreach (var p in palettePaths)
+        foreach (var p in palettesIn)
         {
-            var pal = File.Exists(p) ? JascPalette.Load(p) : new Rgba32[16];
+            var pal = p;
             if (pal.Length < 16) Array.Resize(ref pal, 16);
             palettes.Add(pal);
         }
 
-        var mt = File.ReadAllBytes(metatilesBin);
         if (mt.Length % (2 * tilesPerMetatile) != 0)
             throw new FormatException($"'{metatilesBin}': size {mt.Length} is not a multiple of {2 * tilesPerMetatile} bytes.");
         var entries = new MetatileEntry[mt.Length / 2];
         for (int i = 0; i < entries.Length; i++) entries[i] = new MetatileEntry(BinaryPrimitives.ReadUInt16LittleEndian(mt.AsSpan(i * 2)));
 
-        var at = File.ReadAllBytes(attributesBin);
         if (at.Length % attributeSize != 0)
             throw new FormatException($"'{attributesBin}': size {at.Length} is not a multiple of {attributeSize}.");
         var attrs = new uint[at.Length / attributeSize];

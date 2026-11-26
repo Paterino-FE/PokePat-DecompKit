@@ -91,7 +91,10 @@ public sealed class GraphicsViewModel : ObservableObject, IToolkitModule
         if (root == null) return;
         var keep = Folder?.Rel;
         var keepFile = SelectedFile;
-        var folders = await Task.Run(() => GameGraphics.Folders(root));
+        List<GraphicsFolder> folders;
+        // Runs in the background on every project change (also for a Platinum project, which has no graphics/ folder).
+        try { folders = await Task.Run(() => GameGraphics.Folders(root)); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { folders = []; }
         Folders.Clear();
         foreach (var f in folders) Folders.Add(f);
         Summary = $"{folders.Sum(f => f.Count)} images in {folders.Count} folders under graphics/ (Pokémon, trainers, overworld sprites and tilesets have their own modules)";

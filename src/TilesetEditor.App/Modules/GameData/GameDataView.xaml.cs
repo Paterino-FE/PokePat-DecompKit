@@ -39,6 +39,15 @@ public partial class GameDataView : UserControl
 
     private void OnColumnsChanged(object? sender, EventArgs e) => BuildColumns();
 
+    /// <summary>Cards (Platinum items) or the table.</summary>
+    private void ShowCardsOrTable()
+    {
+        var cards = _vm?.CardView;
+        Cards.Content = cards;
+        Cards.Visibility = cards != null ? Visibility.Visible : Visibility.Collapsed;
+        Grid.Visibility = cards != null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
     private static T? FindChild<T>(DependencyObject parent) where T : DependencyObject
     {
         if (parent is T t) return t;
@@ -53,6 +62,7 @@ public partial class GameDataView : UserControl
 
     private void BuildColumns()
     {
+        ShowCardsOrTable();
         Grid.Columns.Clear();
         _columnIndex.Clear();
         var table = _vm?.SelectedTable?.Table;
@@ -73,10 +83,10 @@ public partial class GameDataView : UserControl
   <TextBlock.Style>
     <Style TargetType='TextBlock'>
       <Style.Triggers>
-        <DataTrigger Binding='{{Binding {cell}.IsEditable}}' Value='False'><Setter Property='Foreground' Value='#7D6B69'/><Setter Property='FontStyle' Value='Italic'/></DataTrigger>
+        <DataTrigger Binding='{{Binding {cell}.IsEditable}}' Value='False'><Setter Property='Foreground' Value='{{DynamicResource MutedBrush}}'/><Setter Property='FontStyle' Value='Italic'/></DataTrigger>
         <DataTrigger Binding='{{Binding {cell}.IsChanged}}' Value='True'><Setter Property='FontWeight' Value='SemiBold'/></DataTrigger>
-        <DataTrigger Binding='{{Binding {cell}.HasWarning}}' Value='True'><Setter Property='Background' Value='#FED7AA'/></DataTrigger>
-        <DataTrigger Binding='{{Binding {cell}.HasError}}' Value='True'><Setter Property='Background' Value='#FCA5A5'/></DataTrigger>
+        <DataTrigger Binding='{{Binding {cell}.HasWarning}}' Value='True'><Setter Property='Background' Value='{{DynamicResource WarnCellBrush}}'/></DataTrigger>
+        <DataTrigger Binding='{{Binding {cell}.HasError}}' Value='True'><Setter Property='Background' Value='{{DynamicResource ErrorCellBrush}}'/></DataTrigger>
       </Style.Triggers>
     </Style>
   </TextBlock.Style>

@@ -107,6 +107,7 @@ public sealed class TrainersViewModel : ObservableObject, IToolkitModule
         DiscardCommand = new RelayCommand(() => { _dirty = false; ShowSelected(); }, () => _dirty);
         AddMonCommand = new RelayCommand(AddMon, () => Editing != null && Party.Count < TrainerFile.PartySize);
         NewTrainerCommand = new RelayCommand(NewTrainer, () => _source != null && _all.Count > 0 && !_dirty);
+        MoreSlotsCommand = new RelayCommand(MoreSlots, () => _ctx.Root != null && !_dirty);
         View = new TrainersView { DataContext = this };
         _ = LoadAsync();
     }
@@ -124,6 +125,31 @@ public sealed class TrainersViewModel : ObservableObject, IToolkitModule
     public ICommand DiscardCommand { get; }
     public ICommand AddMonCommand { get; }
     public ICommand NewTrainerCommand { get; }
+    /// <summary>Raises MAX_TRAINERS_COUNT by 64 (more "defeated" flags in the save block).</summary>
+    public ICommand MoreSlotsCommand { get; }
+
+    private void MoreSlots()
+    {
+        var root = _ctx.Root;
+        if (root == null) return;
+        PlannedFile file;
+        int oldMax = 0, newMax = 0;
+        try
+        {
+            file = ProjectWriter.ModifyText(root, TrainerFile.OpponentsFile, t =>
+            {
+                var r = TrainerFile.RaiseMaxTrainers(t, 64);
+                (oldMax, newMax) = (r.OldMax, r.NewMax);
+                return r.Text;
+            }, "MAX_TRAINERS_COUNT +64");
+        }
+        catch (InvalidOperationException ex) { ProjectWriter.Warn("More trainer slots", ex.Message); return; }
+        if (ProjectWriter.Apply(root, "More trainer slots", "include/constants",
+                [file with { Description = $"MAX_TRAINERS_COUNT {oldMax} → {newMax}" }],
+                $"Room for {newMax - oldMax} more trainers. Every trainer has a \"defeated\" flag, so the save block grows by {(newMax - oldMax) / 8} bytes and the system/daily flags move along.",
+                "Old save files no longer match (start a new game). If the build reports \"SaveBlock1FreeSpace\", the save block is full."))
+            _ctx.Reload();
+    }
 
     public ObservableCollection<TrainerListItem> Trainers { get; } = [];
     public ObservableCollection<MonVm> Party { get; } = [];
@@ -147,7 +173,7 @@ public sealed class TrainersViewModel : ObservableObject, IToolkitModule
         set
         {
             if (_selected == value) return;
-            if (_dirty && value != null && MessageBox.Show(Application.Current.MainWindow,
+            if (_dirty && value != null && AppDialog.Show(Application.Current.MainWindow,
                     $"Discard the unsaved changes to {Editing?.Id}?", "Trainers", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             {
                 OnPropertyChanged();

@@ -59,7 +59,8 @@ public class MapPreviewTests
         var youngster = scene.Objects.First(o => o.GraphicsId == "OBJ_EVENT_GFX_YOUNGSTER");
         Assert.Equal((16, 8), (youngster.X, youngster.Y));
         Assert.Same(youngster, scene.FindObject(youngster.Number.ToString()));
-        Assert.Equal(Facing.Right, scene.Objects.First(o => o.GraphicsId == "OBJ_EVENT_GFX_MOM").InitialFacing);
+        // Prof. Birch running from the Zigzagoon: MOVEMENT_TYPE_JOG_IN_PLACE_RIGHT.
+        Assert.Equal(Facing.Right, scene.Objects.First(o => o.GraphicsId == "OBJ_EVENT_GFX_PROF_BIRCH").InitialFacing);
         Assert.Null(scene.FindObject("OBJ_EVENT_ID_PLAYER"));
         // Collision bits exist somewhere (trees/ledges) and the map has walkable tiles.
         var g = scene.Grid!;
@@ -178,20 +179,26 @@ public class MapPreviewTests
 
     // ---------------------------------------------------------------- scripts
 
+    /// <summary>Maxie's local id in MossdeepCity: LOCALID_MAXIE up to expansion 1.12, LOCALID_MOSSDEEP_MAXIE later.</summary>
+    internal static string MaxieLocalId(string root) =>
+        File.ReadAllText(Path.Combine(root, "data", "maps", "MossdeepCity", "map.json")).Contains("\"LOCALID_MOSSDEEP_MAXIE\"")
+            ? "LOCALID_MOSSDEEP_MAXIE" : "LOCALID_MAXIE";
+
     [Fact]
     public void MossdeepMagmaScene_BecomesSimultaneousPhases()
     {
         var root = TestPaths.ReferenceProject;
+        var id = MaxieLocalId(root);
         var r = ScriptMovementPhases.Read(root, "MossdeepCity", "MossdeepCity_EventScript_TeamMagmaEnterSpaceCenter");
         Assert.True(r.Phases.Count >= 3);
-        var enter = r.Phases.Single(p => p.Orders.Any(o => o.Target == "LOCALID_MAXIE") && p.Orders.Count == 5);
+        var enter = r.Phases.Single(p => p.Orders.Any(o => o.Target == id) && p.Orders.Count == 5);
         Assert.Equal(["walk_down", "walk_right", "walk_right", "walk_down", "walk_down", "walk_down",
             "walk_right", "walk_right", "walk_right", "walk_right", "walk_right", "walk_right", "walk_right"],
-            enter.Orders.Single(o => o.Target == "LOCALID_MAXIE").Steps);
+            enter.Orders.Single(o => o.Target == id).Steps);
 
         var project = ProjectLoader.Load(root);
         var scene = MapScene.Load(project, "MossdeepCity");
-        var maxie = scene.FindObject("LOCALID_MAXIE");
+        var maxie = scene.FindObject(id);
         Assert.NotNull(maxie);
         Assert.Equal(14, maxie!.Number);
         Assert.Equal((45, 25), (maxie.X, maxie.Y)); // the 14th object_events entry
@@ -199,7 +206,7 @@ public class MapPreviewTests
         var sim = MovementSimulator.Simulate(r.Phases,
             t => MapScene.IsPlayer(t) ? new ActorStart(MovementSimulator.PlayerKey, "Player", 0, 0, Facing.Down, true)
                 : scene.FindObject(t) is { } o ? new ActorStart($"obj{o.Index}", o.Name, o.X, o.Y, o.InitialFacing) : null, scene.Grid);
-        var track = sim.Tracks.Single(t => t.Target == "LOCALID_MAXIE" && t.Steps.Count == 13);
+        var track = sim.Tracks.Single(t => t.Target == id && t.Steps.Count == 13);
         Assert.Equal((maxie.X + 9, maxie.Y + 4), (track.EndX, track.EndY));
         Assert.Empty(sim.Warnings);
     }

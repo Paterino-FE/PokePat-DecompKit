@@ -299,10 +299,10 @@ public sealed class SpritesViewModel : ObservableObject, IToolkitModule
         }
         catch (TilesetEditor.Export.ExportValidationException ex)
         {
-            MessageBox.Show(Application.Current.MainWindow, ex.Message, "Register sprite", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDialog.Show(Application.Current.MainWindow, ex.Message, "Register sprite", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        if (result.ColorChanges.Count > 0 && MessageBox.Show(Application.Current.MainWindow,
+        if (result.ColorChanges.Count > 0 && AppDialog.Show(Application.Current.MainWindow,
                 "These colors are not in the palette and will be replaced:\n\n" +
                 string.Join("\n", result.ColorChanges.Take(12).Select(c => $"  {c.From.ToHex()} → {c.To.ToHex()}")) + "\n\nContinue?",
                 "Confirm color loss", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
@@ -310,7 +310,7 @@ public sealed class SpritesViewModel : ObservableObject, IToolkitModule
         var applied = new TilesetEditor.Export.ExportApplier().Apply(result.Plan);
         if (!applied.Success)
         {
-            MessageBox.Show(Application.Current.MainWindow, "Error: " + applied.Error + (applied.RolledBack ? "\nAll changes were rolled back." : ""),
+            AppDialog.Show(Application.Current.MainWindow, "Error: " + applied.Error + (applied.RolledBack ? "\nAll changes were rolled back." : ""),
                 "Register sprite", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }

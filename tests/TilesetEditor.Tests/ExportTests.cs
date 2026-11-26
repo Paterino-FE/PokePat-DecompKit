@@ -63,8 +63,17 @@ public class ExportTests
             "    .metatileAttributes = gMetatileAttributes_ToolkitTest,\n    .callback = NULL,\n};\n", headers);
         Assert.DoesNotContain("\r\n", headers);
         var gfx = Encoding.UTF8.GetString(plan.Modified.ElementAt(1).Content);
-        Assert.Contains("INCBIN_U16(\"data/tilesets/secondary/toolkit_test/palettes/15.gbapal\")", gfx);
-        Assert.Contains("const u32 gTilesetTiles_ToolkitTest[] = INCBIN_U32(\"data/tilesets/secondary/toolkit_test/tiles.4bpp.lz\");", gfx);
+        if (project.Style.UsesIncGfx)
+        {
+            // expansion 1.13+: source files named directly, conversion as second argument (as the existing secondaries do).
+            Assert.Contains($"INCGFX_U16(\"data/tilesets/secondary/toolkit_test/palettes/15.pal\", \"{project.Style.PalettesOutputExtension}\")", gfx);
+            Assert.Contains($"const u32 gTilesetTiles_ToolkitTest[] = INCGFX_U32(\"data/tilesets/secondary/toolkit_test/tiles.png\", \"{project.Style.TilesOutputExtension}\");", gfx);
+        }
+        else
+        {
+            Assert.Contains("INCBIN_U16(\"data/tilesets/secondary/toolkit_test/palettes/15.gbapal\")", gfx);
+            Assert.Contains("const u32 gTilesetTiles_ToolkitTest[] = INCBIN_U32(\"data/tilesets/secondary/toolkit_test/tiles.4bpp.lz\");", gfx);
+        }
 
         // Slot 0 normalized away from the sandbox color, CRLF kept for .pal.
         var pal = Encoding.ASCII.GetString(plan.Files.First(f => f.RelativePath.EndsWith("palettes/06.pal")).Content);

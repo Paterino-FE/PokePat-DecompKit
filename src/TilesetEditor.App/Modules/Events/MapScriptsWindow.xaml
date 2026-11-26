@@ -1,4 +1,4 @@
-<Window x:Class="TilesetEditor.App.Modules.Events.MapScriptsWindow"
+<Window Icon="pack://application:,,,/Assets/decompkit.ico" x:Class="TilesetEditor.App.Modules.Events.MapScriptsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Existing scripts" Width="1100" Height="700" WindowStartupLocation="CenterOwner">
@@ -26,8 +26,8 @@
                     <DataTemplate>
                         <StackPanel Margin="0,1">
                             <TextBlock Text="{Binding Name}" FontFamily="Consolas" FontSize="11" FontWeight="SemiBold"/>
-                            <TextBlock FontSize="10" Foreground="#7D6B69">
-                                <Run Text="{Binding KindText, Mode=OneWay}"/><Run Text="  "/><Run Text="{Binding UsedByText, Mode=OneWay}" Foreground="#B8212B"/>
+                            <TextBlock FontSize="10" Foreground="{DynamicResource MutedBrush}">
+                                <Run Text="{Binding KindText, Mode=OneWay}"/><Run Text="  "/><Run Text="{Binding UsedByText, Mode=OneWay}" Foreground="{DynamicResource AccentDarkBrush}"/>
                             </TextBlock>
                         </StackPanel>
                     </DataTemplate>
@@ -40,7 +40,7 @@
                     <DataTemplate>
                         <DockPanel ToolTip="{Binding Raw}">
                             <TextBlock DockPanel.Dock="Left" Text="{Binding Icon}" Width="24"/>
-                            <TextBlock DockPanel.Dock="Right" Text="→" Foreground="#B8212B" FontWeight="Bold" Margin="6,0,0,0"
+                            <TextBlock DockPanel.Dock="Right" Text="→" Foreground="{DynamicResource AccentDarkBrush}" FontWeight="Bold" Margin="6,0,0,0"
                                        Visibility="{Binding JumpVisibility}"/>
                             <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
                         </DockPanel>

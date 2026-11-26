@@ -1,4 +1,4 @@
-# PokéPat DecompKit für pokeemerald-expansion
+# PokéPat DecompKit für pokeemerald-expansion und pokeplatinum
 
 Windows-Anwendung (C#/WPF, .NET 8) mit einem gemeinsamen Einstieg für Projekt-Werkzeuge, nach dem
 Vorbild von FEBuilderGBA. Alle Module arbeiten direkt auf den Dateien des Decomp-Projekts.
@@ -17,8 +17,59 @@ Vorbild von FEBuilderGBA. Alle Module arbeiten direkt auf den Dateien des Decomp
 | **Trainers** – Teams ansehen/ändern (Name, Klasse, Bild, Items, KI, Pokémon mit Item/Fähigkeit/Wesen/Attacken/DVs), neue Trainer anlegen; `src/data/trainers.h` (C-Format) **und** `src/data/trainers.party` (Competitive Syntax, automatisch erkannt) | fertig |
 | **Game data** – Tabellen bearbeiten: Trainerklassen (Name, Preisgeld, Ball; **neue Klassen anlegen**), Items (Name, Preis, Beschreibung), Attacken (Name, Typ, Kategorie, Stärke, Genauigkeit, AP, Beschreibung), Fähigkeiten, Pokémon (Name, Basiswerte, Typen, Fähigkeiten), Typen, Wesen, Ortsnamen | fertig (Werte, die von Config-Optionen abhängen oder in `#if` stehen, nur lesend) |
 | **Graphics** – Spielgrafiken (Titelbild, Menüs, Textfenster, Kampfhintergründe …) mit Spielfarben ansehen und durch gleich große Bilder ersetzen | fertig |
+| **Mod „Dialog portraits“ 1.1** – Porträt (64×64) links oder rechts über der Textbox, auf Wunsch gespiegelt (Baustein „Show portrait“ → *Where*; im Skript `setvar VAR_0x8005, PORTRAIT_POS_RIGHT` + `special ShowPortraitAt`); **Bilder** bis 128×96 (Karte, Brief …) mittig über der Textbox (Bausteine „Show picture“/„Hide picture“, `special ShowPicture`), unter Mods → Dialog portraits aus jedem PNG (größere werden verkleinert, 15 Farben). Ein Bild sind sechs 64×32-Sprites, gespeichert als 64×192-Streifen in `graphics/portraits/pictures/`. „⬆ Update“ behält vorhandene Porträts. | fertig (im Emulator noch anzusehen) |
 
 Die Programmoberfläche ist englisch (seit 25.11.2026), diese Doku bleibt deutsch; Knopfnamen stehen in der englischen Form.
+
+## Spiel wählen: Smaragd oder Platin
+
+Beim ersten Start (und unter **Setup…**) wählst du in *Get started* zuerst das Spiel:
+
+* **Pokémon Smaragd** – pokeemerald-expansion (GBA). Alle Module wie bisher.
+* **Pokémon Platin** – [pret/pokeplatinum](https://github.com/pret/pokeplatinum) (NDS). *Get started* installiert die
+  Build-Tools aus der INSTALL.md von pokeplatinum (`bison flex g++ gcc-arm-none-eabi git make ninja-build pkg-config python3 …`),
+  klont pokeplatinum auf einen eigenen Branch `pokepat` und auf Windows melonDS als Emulator. Poryscript, Porytiles und
+  Porymap werden für Platin nicht gebraucht.
+
+Ein vorhandenes Projekt wird beim Öffnen automatisch erkannt (Smaragd: `include/fieldmap.h` + `src/data/tilesets/headers.h`,
+Platin: `platinum.us/`, `res/pokemon/`, `include/data/map_headers.h`); die Navigation zeigt dann die Module dieses Spiels.
+
+### Module für Platin
+
+| Modul | Inhalt |
+|---|---|
+| Project | Ordner, Branch, Anzahl Pokémon/Attacken/Items/Trainer/Maps, Build-Befehl, ROM (`build/pokeplatinum.us.nds`), DS-Emulator |
+| Pokémon | Kampf-Sprites vorne/hinten, normal und schillernd, weibliche Varianten; Sprite durch PNG ersetzen (80×80 oder 160×80; alle vier Bilder teilen eine 16-Farben-Palette, die übrigen Bilder werden umgefärbt, die Shiny-Farben von den nächstliegenden alten Farben übernommen); Level-Attacken; Entwicklungen |
+| Trainers | Name, Klasse (mit Bild), Doppelkampf, Items, KI-Flags, Team (Pokémon, Level, Item, Attacken, IVs), Texte (`\n` neue Zeile, `\r` neue Box, `\f` scrollen) |
+| Game data | Pokémon (Werte, Typen, Fähigkeiten, Fangrate, Geschlecht, Wachstum, Ei-Gruppen, Items, Pokédex-Texte), Attacken, Items, Namen von Fähigkeiten, Typen, Wesen, Trainerklassen und Orten |
+| Maps | Event-Editor wie in Porymap: Events anklicken und ziehen (Kachel-Raster), Trigger an der Ecke größer/kleiner ziehen, mit „+ Person/Trainer/Sign/Warp/Trigger“ und Klick auf die Karte neue setzen, Eigenschaften seitlich bearbeiten (Warp-Ziele aus den Warps der Zielmap), Entf/„Delete“ löscht (Warnung, wenn Skripte die Person noch nutzen), „Open in Events & Dialogs“ für Skript und Texte. Neue Events ohne Skript bekommen `"script": 0`. Das Gelände selbst ist (noch) nicht bearbeitbar. Dazu die Vorschau jeder Map aus den Land-Daten, Personen mit ihrem Overworld-Sprite in Startblickrichtung: begehbar/blockiert, Bodenverhalten (Gras, Wasser, Türen …), Props (Gebäude, Bäume) und Events. Platin-Maps sind 3D-Modelle; einen Map-Editor für pokeplatinum gibt es noch nicht. |
+| Trainers – neue Trainer | „+ New trainer…“: Kopie des gewählten Trainers (Team, Items, KI, Texte) mit Name und Klasse; Datei `res/trainers/data/<klasse>_<name>.json`, Konstante vor `MAX_TRAINERS` in `generated/trainers.txt` und das eigene Besiegt-Flag (der Build bricht ab, wenn es mehr Trainer als Trainer-Flags gibt). |
+| Trainers – Klassen | „Neue Trainerklasse…“: Konstante am Ende von generated/trainer_classes.txt, Bilddateien aus einer ähnlichen Klasse kopiert (optional neues 80×80-Bild), Name in beiden Textbanken, Geschlecht (`include/data/trainer_class_genders.h`) und Preisgeld (`trainer_class_prize_mul.h`) – ohne diese beiden Einträge liest das Spiel über das Tabellenende hinaus. „Replace…“ unter dem Bild ersetzt das Kampfbild einer Klasse. |
+| Events & Dialogs | Aufgebaut wie der Event-Baukasten von Smaragd: links Map und alle Events (Personen, Schilder, versteckte Items, Warps, Trigger-Felder; „+ Person“, „+ Sign“, „+ Trigger tile“, Duplicate, Delete), in der Mitte was das gewählte Event tut – Bausteine bei Skripten aus PokéPat, lesbare Schritte bei Original-Skripten (Texte direkt änderbar, „Rebuild from blocks“) –, rechts der Editor mit Vorschau in der Spielschrift (inkl. Mugshot). Eigenschaften jedes Events (Aussehen mit Sprite, Position per Klick auf die Karte, Bewegung, Versteck-Flag …), alle Texte der Map („All texts“) und die Skriptdatei als Code bleiben bearbeitbar. Bausteine werden als Kommentarzeile `/* PokePat blocks: … */` über dem Skript gespeichert und öffnen sich wieder als Bausteine. `'` und `"` werden automatisch zu ’ “ ” (die Spielschrift kennt nur diese), Zeichen, die das Spiel nicht darstellen kann, werden angezeigt. |
+| Events – Bausteine | Nachricht, Ja/Nein-Frage, Mugshot · Item/Pokémon geben, Heilen · Trainer-/Wildkampf · „nur einmal“, Flag setzen/löschen, Variable setzen · Fanfare, Warten, Warp. Änderungen gehen sofort in Skript und Textbank (gespeichert mit „Save“); Befehle passend zur pokeplatinum-Version. Neue Trigger-Felder setzen am Ende ihre Variable, damit sie nur einmal auslösen. |
+| Flags & Variables | Alle Flags und Variablen aus `generated/vars_flags.txt` nach Gruppe (Story, Personen verstecken, Geschenke erhalten, versteckte Items, besiegte Trainer, täglich, map-lokal, frei …) mit Nummer und jeder Stelle, die sie setzt, löscht oder prüft; freie Flags für eigene Events (auch benennen, die Nummer bleibt). „+ New flag“/„+ New variable“ vergibt einen freien, unbenutzten Platz unter deinem Namen (nie Flag 0, das bedeutet „kein Flag“; die Plätze direkt nach den Trainer-Flags bleiben für neue Trainer frei). „🔍 Check: never used“ listet benannte Flags, die nirgends vorkommen, und Flags, die gesetzt, aber nie geprüft werden. Trainer-Flags: das Spiel nutzt `TRAINER_DEFEATED_FLAGS_START + Trainernummer` – PokePat prüft, dass jeder Trainer sein Flag hat, und vergibt fehlende auf freie Plätze. |
+| Wild Pokémon | Pro Map: Gras (12 Plätze mit festen Chancen 20/20/10/10/10/10/5/5/4/4/1/1 %), Ersatzlisten (Morgen/Tag und Nacht für Platz 3–4, Schwarm für 1–2, Pokéradar für 5/6/11/12, GBA-Slot für 9–10), Surfen und drei Angeln (5 Plätze, 60/30/5/4/1 %, Level-Spanne). Icons, Übersicht „wer wie oft“, Prüfung von Leveln und leeren Tabellen. Beide pokeplatinum-Versionen, Dateien behalten ihr Format. |
+| Events – Trainer | „+ Trainer“ setzt einen Trainer auf die Map: Sichtweite, Blickrichtung, Aussehen automatisch aus der Trainerklasse; Team und Kampftexte werden angezeigt, Sprung ins Trainers-Modul. Beide Formate (neu: `"trainer": {id, sight_range}`, alt: `"script": "TRAINER_X"` + `"data": [Sicht]`). |
+| Shops | Die Sortimente aus `include/data/mart_items.h`: die gemeinsame Liste aller Poké Marts (jedes Item mit der Orden-Stufe, ab der es verkauft wird: 0 → 1–2 → 3–4 → 5–6 → 7 → 8 Orden; höchstens 63 Items) und die Sonderläden (Stadt-Spezialitäten, Kaufhaus Schleiede, Untergrund-Waren, Siegel). Mit Icon und Preis, Reihenfolge ändern, Items hinzufügen/entfernen; zu jedem Laden die Maps, die ihn öffnen. Gespeichert werden nur geänderte Listen. |
+| Events – Textsuche | Tab „🔍 Search all texts“: alle Texte des Spiels (~700 Textbanken) nach Wörtern oder Text-ID durchsuchen, auf Map-Texte beschränkbar; ein Treffer öffnet die Map mit diesem Text im Editor. |
+| Events – Bewegung | Baustein „🚶 Move“ für kleine Zwischensequenzen: Person (oder Spieler) läuft Schritte (langsam/normal/schnell/rennen), dreht sich, springt, „!“/„!!“, wartet, wird (un)sichtbar; auf Wunsch wartet das Skript, bis die Bewegung fertig ist. Die Bewegungsdaten werden wie im Spiel ausgerichtet ans Skript angehängt. |
+| Maps & Events – Bearbeiten | Mehrere Events per Rahmen oder Strg+Klick auswählen und zusammen ziehen/mit Pfeiltasten verschieben (Umschalt = 5 Felder), Strg+C/Strg+V (an der Mausposition), Strg+D duplizieren, Entf löschen. **Strg+Z/Strg+Y** machen ungespeicherte Änderungen im Map-Editor und in Events & Dialogs rückgängig. **Warps in beide Richtungen**: beim neuen Warp optional der passende Gegen-Warp auf der Zielmap. |
+| Backups | Jede Änderung von PokéPat (neueste zuerst) mit neuen/geänderten/gelöschten Dateien und ob sie seitdem erneut geändert wurden. „↩ Undo this change“ nimmt eine Änderung zurück, „⏪ Back to before this“ setzt das Projekt auf den Stand davor (auch alle späteren Änderungen). Rückgängig machen hat selbst ein Backup. Alte Backups (> 30 Tage) löschen. |
+| Mugshots | Erscheint, solange die Mod „Dialog mugshots“ an ist. Mugshots rechts neben der Textbox oder links (gespiegelt, damit die Person zum Text schaut): `ShowMugshot MUGSHOT_X, MUGSHOT_POS_LEFT`, im Baustein „🖼 Mugshot“ per Auswahl. Bilder (z. B. Karten, Briefe) mittig über der Textbox: `ShowPicture PICTURE_X` … `HidePicture` (verschwinden auch mit CloseMessage), Baustein „🗺 Picture“. Bei jedem Text mit Mugshot-Vorschau (💬-Schritt eines Events oder „All texts“) schreibt „➕ Show it before this text“ den gewählten Mugshot direkt vor diesen Text ins Skript (`ShowMugshot …` in der Zeile davor; ein Mugshot-Befehl direkt darüber wird ersetzt, `constants/mugshots.h` wird eingebunden). Bei Skripten aus Bausteinen gilt stattdessen der Baustein „🖼 Mugshot“. Grenze: 192 Kacheln à 8×8 (z. B. 128×96, 96×128, 256×48) – der Bereich des Ortsnamen-Einblenders. **Vollbilder** (ab Mod 1.2): 256×192 mit bis zu 255 Farben auf einem eigenen Bildschirm wie die Stadtkarte – `ShowFullscreenPicture FULLSCREEN_X` blendet die Map aus, zeigt das Bild bis A oder B und kehrt zurück; im Baustein „🗺 Picture“ wählbar (schließt eine offene Textbox vorher). Gespeichert als 8-Bit-PNG hinter den Bildern im Archiv `area_win_gra.narc`. PNGs jeder Größe werden passend verkleinert (Seitenverhältnis bleibt). Seit Mod 1.1 nutzen Mugshots die freien Paletten 14/15 statt der Text-Palette 13. Veraltete Mods sind sichtbar: „⬆ n update(s) available“ unter Mods in der Navigation (geprüft kurz nach dem Start, auch ohne das Modul zu öffnen), ein Hinweis mit „⬆ Update all“ oben im Modul und ein Schild „⬆ alt → neu“ an der Mod. Ein Update schaltet die alte Version aus und die neue an; eigene Mugshots, Bilder und Einstellungen bleiben. |
+| Sprites | Kampfbilder aller Trainerklassen (Galerie, ersetzen, neue Klasse); Overworld-Figuren mit allen Frames (ersetzen, neue Figuren anlegen – neueres pokeplatinum baut sie aus PNGs: Bild nach `res/graphics/field_sprites/npc/`, Eintrag in `meson.build` und `field_sprites.order`, Konstante, vier Tabelleneinträge in `object_event_gfx_data.c`, kopiert von einer Vorlagenfigur) |
+| Sprites – Spielfigur | Alle Bilder von Lucas und Dawn an einer Stelle: Kampfbild vorne, Rückansicht (Wurf-Animation), Scan-Form, Begegnungs-Mugshot und alle Overworld-Formen (laufen, Rad, Surfer, Angeln, Pokétch, Speichern …) – anklicken = ersetzen |
+| Game data – Items als Karten | Items als Karten mit Icon (Name, Preis, Tasche, Effekt, Beschreibung); Suche und Filter wie in der Tabelle, Umschalter „Cards with icons“. „Icon…“ ändert das Icon: gemeinsam genutzte Icons für alle oder ein eigenes Icon nur für dieses Item (bei TMs immer eigenes, weil alle TMs ein Bild mit verschiedenen Paletten teilen) |
+| Graphics – Kategorien | Bilder als gleich große Kacheln, nach Ordner gestaffelt; die Reihen passen sich der Fensterbreite an (kein seitliches Scrollen). Bereiche: Kampffelder (Plattformen mit Tag/Abend/Nacht-Palette), Trainer-Rückansichten, Kampfoberfläche, Typ-Icons, Ballwürfe, Titelbild, Textfenster, Menüs, Beutel, Pokédex, Trainerpass, Karte, Pokétch, Untergrund, Kampfzone, Wettbewerbe … Die großen Kampfhintergründe liegen in pokeplatinum noch als fertiges Archiv vor (`res/prebuilt/battle/graphic/batt_bg.narc`) und sind noch nicht als Bilder bearbeitbar. |
+| Game data – Hinzufügen | „+ Add trainer class…“ und „+ Add item…“ (Kopie eines ähnlichen Items vor `MAX_ITEMS`; Name, Preis, Beschreibung frei) |
+| Graphics | Alle Bilder unter `res/graphics` nach Bildschirm (Vorschau, Palette, Prüfung, ersetzen in den alten Farben oder mit eigener Palette, als 4-bit speichern); Kampf-Healthboxen: prüft echtes 4-bit-PNG und Palettenreihenfolge wie player_singles.png, repariert beides verlustfrei, ersetzt Bilder (Farben werden exakt auf die Master-Palette abgebildet) |
+| Mods | EP-Teiler als Basis-Item zum Ein-/Ausschalten (Flag 0x053C), Level-Caps nach Orden (Werte in PokePat änderbar), wiederverwendbare TMs, VMs ohne erlernte Attacke (VM im Beutel + Orden), Dialog-Mugshots (eigene Skriptbefehle `ShowMugshot`/`ClearMugshot`, Bilder in PokePat verwalten). Defined Protagonist (Spielername, Geschlecht und Rivalenname fest – das Intro überspringt die Fragen; Werte in den Mod-Einstellungen). Jede Mod wird ein- und ausgeschaltet; Ausschalten stellt die Originaldateien exakt wieder her (Vanilla). Mods, deren Änderungen schon im Projekt stecken, erkennt PokePat und kann sie ebenfalls ausschalten. Alle sechs zusammen auf einem unveränderten pokeplatinum gebaut. |
+
+PokePat unterstützt beide Varianten von pokeplatinum: die ältere (`include/data/map_headers.h`, `res/field/events/…`) und die aktuelle mit einem Ordner pro Map (`res/field/maps/<map>/header.json`, `events.json`, `scripts.s`; Skripte per Label). Mods bringen für Dateien, die zwischen den Versionen umgezogen sind, Alternativen mit.
+
+Build-Befehl für Platin: `make release` – ein einfaches `make` vergleicht das ROM zusätzlich mit dem Original und schlägt nach jeder Änderung fehl.
+
+Die JSON-Dateien von pokeplatinum behalten ihr Format: einzelne Werte werden an Ort und Stelle ersetzt, Trainer werden
+genau so geschrieben, wie das Projekt sie formatiert – `git diff` zeigt nur die echten Änderungen.
 
 ## Einrichtung (einmalig)
 
@@ -299,7 +350,16 @@ und zeigt die Ausgabe live. Regeln:
   Meldung unterscheidet „neu erzeugt“ und „bereits aktuell, inhaltlich unverändert“.
 - **Fehlschlag**: Fehlerzeilen werden hervorgehoben, es wird **keine** ROM verlinkt; eine vorhandene ROM wird
   ausdrücklich als altes Ergebnis bezeichnet. Abbrechen liefert ebenfalls kein Ergebnis.
+- **Problemliste**: Neben der Ausgabe stehen die Fehler als Liste „Datei:Zeile – Meldung“ (Compiler, Assembler, Linker,
+  Datenwerkzeuge wie mapproc und der Text-Encoder; Pfade relativ zum Projekt, doppelte zusammengefasst, der erste Fehler
+  – meist die Ursache – fett). Ein Klick springt bei Platin-Skripten, -Events und -Texten direkt ins Modul Events & Dialogs
+  (Skript an der Zeile, Text mit ausgewählter ID), sonst öffnet 📄 die Datei an der Zeile (VS Code, falls installiert, sonst
+  das Standardprogramm).
 - *Im Emulator öffnen* ist nur nach einem erfolgreichen Build und mit eingetragenem Emulator aktiv.
+- Nach jedem erfolgreichen Build kopiert PokéPat das ROM in den Ordner `ROM` neben PokéPat (z. B. `ROM\pokeplatinum.nds`,
+  benannt nach dem Projektordner) und ersetzt es beim nächsten Build. Emulator und „ROM anzeigen“ nutzen diese Kopie
+  (startet schneller als die Datei in WSL). Ist das ROM gerade im Emulator geöffnet, meldet die Statuszeile, dass es nicht
+  ersetzt werden konnte.
 
 ## Kommandozeile (gleiche Bibliotheken, z. B. für Automatisierung)
 
@@ -321,6 +381,15 @@ src/TilesetEditor.App       WPF-Shell und Module (Projekt, Tilesets, geplante Mo
 src/TilesetEditor.Cli       Kommandozeile
 tests/                      Unit-, Export-, Build- und Integrationstests; tests/assets mit Test-PNGs und Porytiles-Logs
 ```
+
+## Unterstützte Expansion-Versionen
+
+Getestet mit pokeemerald-expansion **1.10.2** und **1.17.2** (alle Unit- und Integrationstests laufen gegen beide; mit
+1.17.2 wurde nach Tileset-Export, neuem Sprite, Trainerbild, Dekoration, Game-Data-, Trainer-, Flag- und Event-Änderungen
+erfolgreich ein ROM gebaut). Seit 1.13 haben sich mehrere Dateiformate geändert (`INCGFX` statt `INCBIN`, Konstanten als
+`enum`, `gTrainerPicInfo`, `ITEM_NAME`, Dekorationstexte direkt in `header.h` …). Das Kit liest beide Varianten und schreibt
+immer im Stil, den das Projekt bereits verwendet. Die Übersicht der Unterschiede steht im englischen README
+(„Supported pokeemerald-expansion versions“).
 
 ## Abgeleitete Regeln für dieses Projekt (pokemerald-reyamon, Branch main)
 

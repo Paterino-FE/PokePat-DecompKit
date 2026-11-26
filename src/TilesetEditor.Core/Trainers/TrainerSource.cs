@@ -13,6 +13,7 @@ public enum TrainerFormat
 /// <summary>
 /// The project's trainer definitions in whichever format the branch uses. Picks trainers.party when
 /// include/config/general.h sets COMPETITIVE_PARTY_SYNTAX TRUE (and the file is not empty), otherwise trainers.h.
+/// Without the setting (expansion 1.13+ removed it) trainers.party is used unless trainers.h is a hand-written source.
 /// </summary>
 public sealed partial class TrainerSource
 {
@@ -67,9 +68,20 @@ public sealed partial class TrainerSource
             var m = CompetitiveDefine().Match(File.ReadAllText(general));
             if (m.Success) return m.Groups[1].Value is "TRUE" or "1" ? TrainerFormat.Party : TrainerFormat.C;
         }
-        // No setting found: use whichever file actually contains trainers.
+        // No setting (expansion 1.13+ always uses trainers.party): use trainers.h only if it is a real source file,
+        // not the one the build generates from trainers.party.
         var c = Full(root, TrainerFile.TrainersFile);
-        return File.Exists(c) && TrainerFile.Parse(File.ReadAllText(c)).Count > 0 ? TrainerFormat.C : TrainerFormat.Party;
+        if (!File.Exists(c)) return TrainerFormat.Party;
+        var cText = File.ReadAllText(c);
+        if (IsGeneratedFromParty(cText)) return TrainerFormat.Party;
+        return TrainerFile.Parse(cText).Count > 0 ? TrainerFormat.C : TrainerFormat.Party;
+    }
+
+    /// <summary>True for the trainers.h the build writes from trainers.party ("DO NOT MODIFY THIS FILE! It is auto-generated …").</summary>
+    public static bool IsGeneratedFromParty(string trainersH)
+    {
+        var head = trainersH.Length > 600 ? trainersH[..600] : trainersH;
+        return head.Contains("auto-generated from src/data/trainers.party", StringComparison.OrdinalIgnoreCase);
     }
 
     public static TrainerSource Load(string root)

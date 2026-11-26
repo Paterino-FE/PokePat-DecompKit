@@ -44,6 +44,9 @@ public sealed class SandboxCompiler(PorytilesClient client)
         ProjectLoader.FieldmapFile,
         ProjectLoader.GlobalFieldmapFile,
         "include/constants/metatile_behaviors.h",
+        // expansion 1.13+ declares FRLG attribute fields (terrain, encounter type …) in global.fieldmap.h; Porytiles needs the
+        // sMetatileAttrMasks table from here to resolve them (and then picks the 2-byte Emerald layout from config.yaml).
+        "src/fieldmap.c",
     ];
 
     public static string DefaultWorkRoot =>

@@ -57,8 +57,42 @@ public sealed class EventsViewModel : ObservableObject, IToolkitModule
             if (_ctx.Root != null && SelectedMap != null)
                 new MapScriptsWindow(_ctx.Root, SelectedMap, _ctx.Project) { Owner = Application.Current.MainWindow }.Show();
         }, () => SelectedMap != null && _ctx.IsOpen);
+        Existing = new ExistingDialogsViewModel(RenderBoxes, CreateFromExisting, (map, label) =>
+        {
+            if (_ctx.Root != null) new MapScriptsWindow(_ctx.Root, map, _ctx.Project, label) { Owner = Application.Current.MainWindow }.Show();
+        });
         View = new EventsView { DataContext = this };
         _ = LoadAsync();
+    }
+
+    /// <summary>The "Existing in the game" tab: every person, sign, trigger and text the project already has.</summary>
+    public ExistingDialogsViewModel Existing { get; }
+
+    private int _selectedTab;
+    /// <summary>0 = my events (builder), 1 = existing in the game.</summary>
+    public int SelectedTab { get => _selectedTab; set => Set(ref _selectedTab, value); }
+
+    /// <summary>A new event in <paramref name="map"/> with the texts of an existing one as message blocks (a starting point).</summary>
+    private void CreateFromExisting(string map, string title, IReadOnlyList<string> texts)
+    {
+        if (!_allMaps.Contains(map)) return;
+        if (!Maps.Contains(map)) MapFilter = "";
+        SelectedMap = map;
+        var e = new ToolkitEvent
+        {
+            Map = map,
+            Title = "Copy of " + title,
+            Trigger = EventTrigger.Person,
+            Steps = texts.Take(10).Select(t => (EventStep)new MessageStep { Text = t }).ToList(),
+        };
+        if (e.Steps.Count == 0) e.Steps.Add(new MessageStep { Text = "Hello!" });
+        e.Label = PoryscriptGenerator.SuggestLabel(map, "Event", _doc.Events.Select(x => x.Label).Concat(_existingLabels));
+        _doc.Events.Add(e);
+        Events.Add(e);
+        SelectedEvent = e;
+        DocumentChanged();
+        SelectedTab = 0;
+        Status = $"New event in {map} with {e.Steps.Count} text(s) of \"{title}\". Change it, then assign it to a person or sign.";
     }
 
     // ---- IToolkitModule
@@ -297,6 +331,7 @@ public sealed class EventsViewModel : ObservableObject, IToolkitModule
             var start = keep ?? _doc.Events.FirstOrDefault()?.Map;
             if (start != null && Maps.Contains(start)) SelectedMap = start;
             OnPropertyChanged(nameof(ManagedInfo));
+            _ = Existing.LoadAsync(root, SelectedMap);
             Status = $"{_doc.Events.Count} toolkit event(s) in project · {_symbols.Flags.Count} flags ({_symbols.Flags.Count(f => f.IsUnused)} free) · {_symbols.Items.Count} items · " +
                      (PoryscriptRunner.IsAvailable(root) ? "Poryscript found" : "tools/poryscript missing: check/save not possible");
             DocumentChanged(markDirty: false);
@@ -374,7 +409,7 @@ public sealed class EventsViewModel : ObservableObject, IToolkitModule
     private void DeleteEvent()
     {
         if (SelectedEvent == null) return;
-        if (MessageBox.Show(Application.Current.MainWindow, $"Delete event \"{SelectedEvent.Title}\" ({SelectedEvent.Label})?\n\n" +
+        if (AppDialog.Show(Application.Current.MainWindow, $"Delete event \"{SelectedEvent.Title}\" ({SelectedEvent.Label})?\n\n" +
                 "If it is assigned to a person/sign, the script name stays there and the build fails " +
                 "until the assignment is changed in Porymap.", "Delete event", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         _doc.Events.Remove(SelectedEvent);
@@ -449,7 +484,7 @@ public sealed class EventsViewModel : ObservableObject, IToolkitModule
     {
         if (SelectedNode is not StepNode s) return;
         if (s.Step.Branches().Any(b => b.Steps.Count > 0) &&
-            MessageBox.Show(Application.Current.MainWindow, "This block contains other blocks. Remove everything?", "Remove block",
+            AppDialog.Show(Application.Current.MainWindow, "This block contains other blocks. Remove everything?", "Remove block",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         int i = s.Owner.IndexOf(s.Step);
         s.Owner.RemoveAt(i);
@@ -528,7 +563,7 @@ public sealed class EventsViewModel : ObservableObject, IToolkitModule
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or FormatException)
         {
-            MessageBox.Show(Application.Current.MainWindow, $"The map could not be shown:\n{ex.Message}", "Show on map", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDialog.Show(Application.Current.MainWindow, $"The map could not be shown:\n{ex.Message}", "Show on map", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -621,7 +656,7 @@ public sealed class EventsViewModel : ObservableObject, IToolkitModule
                 return null;
             }
             Status = $"Checked with Poryscript {result.Version}: OK.";
-            if (showOk) MessageBox.Show(Application.Current.MainWindow, "The events are valid and compile with the project's Poryscript.",
+            if (showOk) AppDialog.Show(Application.Current.MainWindow, "The events are valid and compile with the project's Poryscript.",
                 "Check", MessageBoxButton.OK, MessageBoxImage.Information);
             return (pory, result.IncText!);
         }
@@ -640,7 +675,7 @@ public sealed class EventsViewModel : ObservableObject, IToolkitModule
         bool overwrite = false;
         if (!EventsPlanner.GeneratedFileIsUnmodified(root))
         {
-            if (MessageBox.Show(Application.Current.MainWindow,
+            if (AppDialog.Show(Application.Current.MainWindow,
                     $"{EventsPlanner.PoryFile} was edited by hand. Those changes will be lost when saving. Overwrite anyway?",
                     "File edited by hand", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
             overwrite = true;
@@ -652,7 +687,7 @@ public sealed class EventsViewModel : ObservableObject, IToolkitModule
         }
         catch (Exception ex) when (ex is ExportValidationException or InvalidOperationException or IOException)
         {
-            MessageBox.Show(Application.Current.MainWindow, ex.Message, "Cannot save", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDialog.Show(Application.Current.MainWindow, ex.Message, "Cannot save", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         if (plan.Files.Count == 0) { Status = "Nothing to save: the project is already up to date."; return; }
@@ -661,7 +696,7 @@ public sealed class EventsViewModel : ObservableObject, IToolkitModule
         var result = new ExportApplier().Apply(plan);
         if (!result.Success)
         {
-            MessageBox.Show(Application.Current.MainWindow, $"Saving failed: {result.Error}" + (result.RolledBack ? "\n\nAll changes were rolled back." : ""),
+            AppDialog.Show(Application.Current.MainWindow, $"Saving failed: {result.Error}" + (result.RolledBack ? "\n\nAll changes were rolled back." : ""),
                 "Save", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
@@ -683,7 +718,7 @@ public sealed class EventsViewModel : ObservableObject, IToolkitModule
         var slot = SelectedSlot;
         var existing = slot.Script;
         if (existing.Length > 0 && existing != "0" && existing != SelectedEvent.Label && !_doc.Events.Any(e => e.Label == existing) &&
-            MessageBox.Show(Application.Current.MainWindow,
+            AppDialog.Show(Application.Current.MainWindow,
                 $"{slot.Display}\n\nalready has the script \"{existing}\". It stays in the project but will no longer be triggered by this event. Replace?",
                 "Assign script", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         _pendingAssignments.RemoveAll(a => a.Map == SelectedMap && a.Kind == slot.Kind && a.Index == slot.Index);
@@ -692,7 +727,7 @@ public sealed class EventsViewModel : ObservableObject, IToolkitModule
         foreach (var a in _pendingAssignments) PendingAssignments.Add($"{a.Map}: {a.Kind} #{a.Index + 1} → {a.Label}");
         Status = "Assignment queued: it is written to map.json when you save.";
         if (SelectedEvent.Trigger == EventTrigger.Trigger)
-            MessageBox.Show(Application.Current.MainWindow, "Note: a trigger tile only fires when its variable has the configured value (in Porymap: Var/Var Value).",
+            AppDialog.Show(Application.Current.MainWindow, "Note: a trigger tile only fires when its variable has the configured value (in Porymap: Var/Var Value).",
                 "Trigger tile", MessageBoxButton.OK, MessageBoxImage.Information);
         CommandManager.InvalidateRequerySuggested();
     }
@@ -736,7 +771,7 @@ public sealed class EventsViewModel : ObservableObject, IToolkitModule
         }
         catch (InvalidOperationException ex)
         {
-            MessageBox.Show(Application.Current.MainWindow, ex.Message, "New on map", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDialog.Show(Application.Current.MainWindow, ex.Message, "New on map", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         var original = File.ReadAllBytes(full);
@@ -751,7 +786,7 @@ public sealed class EventsViewModel : ObservableObject, IToolkitModule
         var result = new ExportApplier().Apply(plan);
         if (!result.Success)
         {
-            MessageBox.Show(Application.Current.MainWindow, "Error: " + result.Error, "New on map", MessageBoxButton.OK, MessageBoxImage.Error);
+            AppDialog.Show(Application.Current.MainWindow, "Error: " + result.Error, "New on map", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
         LoadSlots();

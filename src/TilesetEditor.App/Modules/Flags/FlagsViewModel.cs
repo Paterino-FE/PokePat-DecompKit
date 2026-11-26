@@ -203,7 +203,7 @@ public sealed class FlagsViewModel : ObservableObject, IToolkitModule
         string what = kind == FlagKind.Flag ? "flag" : "variable";
         if (free.Count == 0)
         {
-            if (MessageBox.Show(Application.Current.MainWindow,
+            if (AppDialog.Show(Application.Current.MainWindow,
                     $"There is no free {(kind == FlagKind.Flag ? "FLAG_UNUSED_…" : "VAR_UNUSED_…")} entry left.\n\nAdd more {what}s to the save data now?\n\n" + ExpandWarning(kind),
                     $"New {what}", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
             Expand(kind, askFirst: false);
@@ -248,7 +248,7 @@ public sealed class FlagsViewModel : ObservableObject, IToolkitModule
         var root = _ctx.Root;
         if (root == null) return;
         string what = kind == FlagKind.Flag ? "flags" : "variables";
-        if (askFirst && MessageBox.Show(Application.Current.MainWindow, ExpandWarning(kind) + "\n\nContinue?", $"More {what}",
+        if (askFirst && AppDialog.Show(Application.Current.MainWindow, ExpandWarning(kind) + "\n\nContinue?", $"More {what}",
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         var rel = kind == FlagKind.Flag ? FlagCatalog.FlagsFile : FlagCatalog.VarsFile;
         List<string> names = [];

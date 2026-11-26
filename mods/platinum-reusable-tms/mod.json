@@ -1,0 +1,25 @@
+{
+  "id": "platinum-reusable-tms",
+  "name": "Reusable TMs",
+  "version": "1.0.0",
+  "author": "PokePat",
+  "game": "platinum",
+  "category": "Items",
+  "description": "TMs are no longer used up when a Pokémon learns their move – like HMs and like in newer games. The bag shows no count next to TMs any more.",
+  "files": [],
+  "edits": [
+    {
+      "file": "src/applications/party_menu/callbacks.c",
+      "type": "replace",
+      "anchor": "        if (Item_IsHMMove(application->partyMenu->learnedMove) == FALSE) {\n",
+      "text": "        if (application->partyMenu->usedItemID < ITEM_TM01 || application->partyMenu->usedItemID > ITEM_HM08) { // PokePat mod platinum-reusable-tms\n"
+    },
+    {
+      "file": "src/applications/bag/windows.c",
+      "type": "replace",
+      "anchor": "        FontSpecialChars_DrawPartyScreenText(controller->specialChars, SPECIAL_CHAR_NUMBER, item, 2, PADDING_MODE_ZEROES, &controller->windows[BAG_UI_WINDOW_ITEM_LIST], 0, yOffset + 5);\n        BagUI_PrintItemCount(controller, itemSlot->quantity, yOffset, TEXT_COLOR(1, 2, 0));\n",
+      "text": "        FontSpecialChars_DrawPartyScreenText(controller->specialChars, SPECIAL_CHAR_NUMBER, item, 2, PADDING_MODE_ZEROES, &controller->windows[BAG_UI_WINDOW_ITEM_LIST], 0, yOffset + 5);\n"
+    }
+  ],
+  "usage": "Nothing to do – every TM stays in the bag after teaching. Give each TM only once (a second one has no use)."
+}

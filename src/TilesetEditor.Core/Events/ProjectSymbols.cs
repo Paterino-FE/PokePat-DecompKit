@@ -35,6 +35,10 @@ public sealed partial class ProjectSymbols
     public IReadOnlyList<string> Maps { get; init; } = [];
     public IReadOnlyList<string> Music { get; init; } = [];
     public IReadOnlyList<string> Sounds { get; init; } = [];
+    /// <summary>PORTRAIT_ constants of the "Dialog portraits" mod (empty if it is not installed).</summary>
+    public IReadOnlyList<string> Portraits { get; init; } = [];
+    /// <summary>PICTURE_ constants of the "Dialog portraits" mod 1.1+ (empty if not installed).</summary>
+    public IReadOnlyList<string> Pictures { get; init; } = [];
     public IReadOnlyList<string> MovementActions { get; init; } = [];
     public IReadOnlyList<string> Specials { get; init; } = [];
     public IReadOnlyList<string> Weathers { get; init; } = [];
@@ -60,9 +64,11 @@ public sealed partial class ProjectSymbols
     // Range markers and helpers, not real values.
     private static readonly string[] Excludes = ["_START", "_END", "_COUNT", "FLAGS_", "SPECIAL_FLAGS", "TEMP_FLAGS", "_FIRST", "_LAST", "_LIST_END"];
 
+    /// <summary>Constants with the prefix from #defines and enumerators (expansion 1.13+ moved many of them into enums).</summary>
     private static List<string> Defines(string text, string prefix, params string[] extraExcludes) =>
         Regex.Matches(text, @"^\s*#define\s+(" + prefix + @"\w+)\b(?!\()", RegexOptions.Multiline)
             .Select(m => m.Groups[1].Value)
+            .Concat(Project.CDefines.Enumerators(text).Select(e => e.Name).Where(n => n.StartsWith(prefix, StringComparison.Ordinal)))
             .Where(n => !Excludes.Concat(extraExcludes).Any(x => n.Contains(x, StringComparison.Ordinal)))
             .Distinct().ToList();
 
@@ -102,6 +108,8 @@ public sealed partial class ProjectSymbols
             Maps = maps.OrderBy(m => m, StringComparer.Ordinal).ToList(),
             Music = Defines(songs, "MUS_"),
             Sounds = Defines(songs, "SE_"),
+            Portraits = Defines(Read("include", "constants", "dialog_portraits.h"), "PORTRAIT_", "PORTRAIT_NONE", "PORTRAIT_POS_"),
+            Pictures = Defines(Read("include", "constants", "dialog_portraits.h"), "PICTURE_", "PICTURE_NONE"),
             MovementActions = MovementAction().Matches(Read("asm", "macros", "movement.inc")).Select(m => m.Groups[1].Value)
                 .Where(n => n != "name").Distinct().ToList(),
             Specials = SpecialDef().Matches(Read("data", "specials.inc")).Select(m => m.Groups[1].Value).Distinct().ToList(),

@@ -1,3 +1,4 @@
+using TilesetEditor.App.Infrastructure;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
@@ -12,11 +13,18 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        Infrastructure.FindBar.Register();   // Ctrl+F / Ctrl+H in every multi-line text box
         DispatcherUnhandledException += OnUnhandled;
         AppDomain.CurrentDomain.UnhandledException += (_, a) => LogCrash("AppDomain", a.ExceptionObject as Exception);
         TaskScheduler.UnobservedTaskException += (_, a) => { LogCrash("Task", a.Exception); a.SetObserved(); };
 
-        var window = new MainWindow();
+        // Theme before the first window, so it never flashes in the wrong colors.
+        // --theme light|dark overrides the saved choice (screenshots, testing).
+        int themeAt = Array.IndexOf(e.Args, "--theme");
+        var theme = themeAt >= 0 && themeAt + 1 < e.Args.Length ? e.Args[themeAt + 1] : new Toolkit.ToolkitSettingsStore().Load().Theme;
+        Infrastructure.ThemeManager.Initialize(Infrastructure.ThemeManager.Parse(theme));
+        Infrastructure.Perf.Log("--- start", 1000);
+        var window = Infrastructure.Perf.Time("create main window (incl. opening the last project)", () => new MainWindow());
         MainWindow = window;
         int shotsAt = Array.IndexOf(e.Args, "--screenshots");
         string? shotsDir = shotsAt >= 0 && shotsAt + 1 < e.Args.Length ? e.Args[shotsAt + 1] : null;
@@ -29,7 +37,9 @@ public partial class App : Application
             window.ShowActivated = false;
             window.ShowInTaskbar = false;
         }
-        window.Show();
+        window.ContentRendered += (_, _) => Infrastructure.Perf.Log("first frame on screen", 1000);
+        Infrastructure.Perf.Time("show main window", window.Show);
+        if (shotsDir == null) Shell.TaskbarIcon.RefreshWhenIdle(window);
 
         // Optional command line (shortcuts, scripted smoke tests):
         //   TilesetEditor.exe [<project-folder>] [--import <png>]...
@@ -37,13 +47,14 @@ public partial class App : Application
         string? project = null;
         for (int i = 0; i < e.Args.Length; i++)
         {
-            if (e.Args[i] == "--screenshots") { i++; continue; }
+            if (e.Args[i] is "--screenshots" or "--theme") { i++; continue; }
             if (e.Args[i] == "--import" && i + 1 < e.Args.Length) imports.Add(e.Args[++i]);
             else project ??= e.Args[i];
         }
         if (project != null) window.ViewModel.OpenProject(project);
         else if (window.ViewModel.NeedsSetup) window.Dispatcher.BeginInvoke(window.ViewModel.RunSetup, DispatcherPriority.ApplicationIdle);
         if (imports.Count > 0) window.ViewModel.ImportIntoTilesetEditor(imports);
+        if (shotsDir == null) window.Dispatcher.BeginInvoke(window.ViewModel.CheckUpdatesInBackground, DispatcherPriority.ApplicationIdle);
         if (shotsDir != null) _ = TakeScreenshotsAsync(window, shotsDir);
     }
 
@@ -56,25 +67,56 @@ public partial class App : Application
         {
             window.ViewModel.SelectedModule = module;
             await Task.Delay(3500);
-            window.UpdateLayout();
-            var content = (FrameworkElement)window.Content;
-            var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap((int)content.ActualWidth, (int)content.ActualHeight, 96, 96,
-                System.Windows.Media.PixelFormats.Pbgra32);
-            bmp.Render(content);
-            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
-            enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
             var name = new string(module.Title.Where(char.IsLetterOrDigit).ToArray());
-            using var fs = File.Create(Path.Combine(dir, $"{window.ViewModel.Modules.IndexOf(module):00}-{name}.png"));
-            enc.Save(fs);
+            Render(window, Path.Combine(dir, $"{window.ViewModel.Modules.IndexOf(module):00}-{name}.png"));
         }
+        // The Get started window with the real checks of this PC.
+        var start = new Shell.GetStartedWindow(window.ViewModel.Context.Settings, check: false)
+        {
+            Owner = window, WindowStartupLocation = WindowStartupLocation.Manual, Left = -20000, Top = -20000,
+            ShowActivated = false, ShowInTaskbar = false,
+        };
+        start.Show();
+        await start.ViewModel.LoadAsync();
+        await start.ViewModel.CheckUpdatesAsync();
+        await Task.Delay(1500);
+        Render(start, Path.Combine(dir, "99-GetStarted.png"));
+        start.Close();
         Shutdown();
     }
+
+    private static void Render(Window window, string file)
+    {
+        window.UpdateLayout();
+        var content = (FrameworkElement)window.Content;
+        var m = content.Margin;
+        double w = content.ActualWidth + m.Left + m.Right, h = content.ActualHeight + m.Top + m.Bottom;
+        var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap((int)w, (int)h, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        // The window's background is not part of its content: draw it first, as on screen.
+        var backdrop = new System.Windows.Media.DrawingVisual();
+        using (var dc = backdrop.RenderOpen()) dc.DrawRectangle(window.Background, null, new Rect(0, 0, w, h));
+        bmp.Render(backdrop);
+        bmp.Render(content);
+        var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+        using var fs = File.Create(file);
+        enc.Save(fs);
+    }
+
+    private static bool _showingCrash;
 
     private static void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         LogCrash("Dispatcher", e.Exception);
-        MessageBox.Show($"Unexpected error:\n\n{e.Exception.Message}\n\n{e.Exception.GetType().Name}\n\nDetails: {CrashLogPath}",
-            "PokéPat DecompKit", MessageBoxButton.OK, MessageBoxImage.Error);
+        var text = $"Something went wrong, but PokéPat keeps running.\n\n{e.Exception.Message}\n\n{e.Exception.GetType().Name}\n\nDetails (for a bug report): {CrashLogPath}";
+        // A second error while the report is open (e.g. in drawing) gets the plain system box, so it cannot loop.
+        if (_showingCrash) MessageBox.Show(text, "PokéPat DecompKit – unexpected error", MessageBoxButton.OK, MessageBoxImage.Error);
+        else
+        {
+            _showingCrash = true;
+            try { AppDialog.Show(text, "Unexpected error", MessageBoxButton.OK, MessageBoxImage.Error); }
+            finally { _showingCrash = false; }
+        }
         e.Handled = true;
     }
 

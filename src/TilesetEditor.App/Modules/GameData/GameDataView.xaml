@@ -3,32 +3,87 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVis"/>
+        <!-- Category chip: game icon + name + count; the chosen one is filled -->
+        <Style x:Key="CategoryChip" TargetType="ToggleButton">
+            <Setter Property="Margin" Value="0,0,6,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentDarkBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Chip" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource PinkStrongBrush}" BorderThickness="1.5"
+                                CornerRadius="16" Padding="8,3,10,3" MinHeight="32" SnapsToDevicePixels="True">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chip" Property="Background" Value="{DynamicResource PinkBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Chip" Property="Background" Value="{DynamicResource PinkStrongBrush}"/>
+                                <Setter TargetName="Chip" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
     <DockPanel Margin="8">
         <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
             <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
             <TextBox Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" Width="220" Margin="0,0,12,0"
                      ToolTip="Constant or any value" AutomationProperties.Name="Search game data"/>
+            <TextBlock Text="Detail:" VerticalAlignment="Center" Margin="0,0,6,0"
+                       Visibility="{Binding HasCategories, Converter={StaticResource BoolVis}}"/>
+            <ComboBox ItemsSource="{Binding Categories}" SelectedItem="{Binding Category}" Width="230" Margin="0,0,12,0"
+                      Visibility="{Binding HasCategories, Converter={StaticResource BoolVis}}" IsTextSearchEnabled="True"
+                      ToolTip="Show only items of one pocket or kind, moves of one type or category, Pokémon of one type"
+                      AutomationProperties.Name="Category filter"/>
             <CheckBox Content="Changed only" IsChecked="{Binding ChangedOnly}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <CheckBox Content="Cards with icons" IsChecked="{Binding UseCards}" VerticalAlignment="Center" Margin="0,0,12,0"
+                      Visibility="{Binding HasCardView, Converter={StaticResource BoolVis}}" ToolTip="Show the items as cards with their icons instead of the table"/>
             <Button Content="Save changes…" Command="{Binding SaveCommand}" FontWeight="SemiBold"/>
             <Button Content="Discard" Command="{Binding ResetCommand}"/>
-            <Button Content="Add trainer class…" Command="{Binding AddTrainerClassCommand}"
-                    Visibility="{Binding IsTrainerClasses, Converter={StaticResource BoolVis}}"/>
+            <Button Content="{Binding AddButtonText}" Command="{Binding AddTrainerClassCommand}" FontWeight="SemiBold"
+                    Visibility="{Binding CanAddEntry, Converter={StaticResource BoolVis}}"/>
             <Button Content="Show in Explorer" Command="{Binding ShowInExplorerCommand}"/>
         </WrapPanel>
+        <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding QuickFilterButtons}" Margin="0,0,0,2"
+                      Visibility="{Binding HasQuickFilters, Converter={StaticResource BoolVis}}" AutomationProperties.Name="Categories">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <ToggleButton Style="{StaticResource CategoryChip}" IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                  ToolTip="{Binding Label}" AutomationProperties.Name="{Binding Label}">
+                        <StackPanel Orientation="Horizontal">
+                            <Image Source="{Binding Icon}" Stretch="None" Margin="0,0,6,0" VerticalAlignment="Center"
+                                   RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                   Visibility="{Binding HasIcon, Converter={StaticResource BoolVis}}"/>
+                            <TextBlock Text="{Binding Label}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding Count}" Foreground="{DynamicResource MutedBrush}" Margin="6,0,0,0" VerticalAlignment="Center" FontSize="11"/>
+                        </StackPanel>
+                    </ToggleButton>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
         <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" Style="{StaticResource Hint}" Margin="0,0,0,2" TextWrapping="Wrap"/>
         <TextBlock DockPanel.Dock="Top" Text="{Binding TableNote}" Style="{StaticResource Hint}" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"/>
-        <Border DockPanel.Dock="Bottom" BorderBrush="#F6ECE8" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="0,6,0,0">
+        <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="0,6,0,0">
             <StackPanel>
                 <TextBlock Text="{Binding Details}" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11" MinHeight="16"/>
                 <TextBlock Style="{StaticResource Hint}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"
-                           Text="Double-click a value to change it. Grey italic values are read-only (expressions, macros or inside #if – the tooltip says why). In texts, \n starts a new line. Changed rows are yellow, errors red (hover for the reason). Saving shows the files first; build the ROM afterwards."/>
+                           Text="Double-click a value to change it. Values that depend on a config option (e.g. I_PRICE or #if blocks) show the value of the current settings; changing one writes it as a fixed value (the tooltip shows the original). Grey italic values are read-only (family-wide macros – the tooltip says why). In texts, \n starts a new line. Changed rows are yellow, errors red. Saving shows the files first; build the ROM afterwards."/>
             </StackPanel>
         </Border>
         <DockPanel DockPanel.Dock="Left" Width="210" Margin="0,0,8,0">
             <TextBlock DockPanel.Dock="Top" Text="Tables" Style="{StaticResource SectionTitle}"/>
             <ListBox ItemsSource="{Binding Tables}" SelectedItem="{Binding SelectedTable}" DisplayMemberPath="Display" AutomationProperties.Name="Game data tables"/>
         </DockPanel>
+        <Grid>
+        <ContentControl x:Name="Cards" Visibility="Collapsed"/>
         <DataGrid x:Name="Grid" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
                   HeadersVisibility="Column" GridLinesVisibility="Horizontal" SelectionMode="Single" SelectionUnit="FullRow"
                   EnableRowVirtualization="True" EnableColumnVirtualization="True" VirtualizingPanel.VirtualizationMode="Recycling"
@@ -36,11 +91,12 @@
             <DataGrid.RowStyle>
                 <Style TargetType="DataGridRow">
                     <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsChanged}" Value="True"><Setter Property="Background" Value="#FEF3C7"/></DataTrigger>
-                        <DataTrigger Binding="{Binding HasError}" Value="True"><Setter Property="Background" Value="#FEE2E2"/></DataTrigger>
+                        <DataTrigger Binding="{Binding IsChanged}" Value="True"><Setter Property="Background" Value="{DynamicResource ChangedRowBrush}"/></DataTrigger>
+                        <DataTrigger Binding="{Binding HasError}" Value="True"><Setter Property="Background" Value="{DynamicResource ErrorRowBrush}"/></DataTrigger>
                     </Style.Triggers>
                 </Style>
             </DataGrid.RowStyle>
         </DataGrid>
+        </Grid>
     </DockPanel>
 </UserControl>

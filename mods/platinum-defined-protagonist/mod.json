@@ -1,0 +1,80 @@
+{
+  "id": "platinum-defined-protagonist",
+  "name": "Defined protagonist",
+  "version": "1.0.0",
+  "author": "PokePat",
+  "game": "platinum",
+  "category": "Story",
+  "description": "The player character and the rival get fixed names, and the gender is fixed: Professor Rowan's intro skips the questions \"Are you a boy or a girl?\", \"What is your name?\" and the naming of the rival. Set the names and the gender below after switching the mod on.",
+  "files": [
+    {
+      "from": "files/include/defined_protagonist.h",
+      "to": "include/defined_protagonist.h"
+    }
+  ],
+  "edits": [
+    {
+      "file": "src/applications/rowan_intro/rowan_intro_app.c",
+      "type": "insert_after",
+      "anchor": "#include \"yes_no_touch_menu.h\"\n",
+      "text": "#include \"defined_protagonist.h\"\n"
+    },
+    {
+      "file": "src/applications/rowan_intro/rowan_intro_app.c",
+      "type": "insert_after",
+      "anchor": "    manager->rivalNamingScreenArgs = NamingScreenArgs_Init(HEAP_ID_ROWAN_INTRO, NAMING_SCREEN_TYPE_RIVAL, 0, TRAINER_NAME_LEN, manager->options);\n",
+      "text": "    // PokePat mod platinum-defined-protagonist: names and gender are fixed.\n    String_CopyChars(manager->playerNamingScreenArgs->textInputStr, sDefinedPlayerName);\n    String_CopyChars(manager->rivalNamingScreenArgs->textInputStr, sDefinedRivalName);\n    manager->playerGender = DEFINED_PROTAGONIST_GENDER;\n    manager->playerNamingScreenArgs->playerGenderOrMonSpecies = DEFINED_PROTAGONIST_GENDER;\n"
+    },
+    {
+      "file": "src/applications/rowan_intro/rowan_intro_app.c",
+      "type": "replace",
+      "anchor": "            manager->state = RI_STATE_GENDR_FADE_OUT_ROWAN;\n",
+      "text": "            manager->state = RI_STATE_LOAD_ROWAN_TILEMAP_0; // PokePat mod platinum-defined-protagonist: no gender and name questions\n"
+    },
+    {
+      "file": "src/applications/rowan_intro/rowan_intro_app.c",
+      "type": "replace",
+      "anchor": "            manager->state = RI_STATE_FADE_OUT_ROWAN_FOR_RIVAL;\n",
+      "text": "            manager->state = RI_STATE_DELAY_BEFORE_END_0; // PokePat mod platinum-defined-protagonist: no rival naming\n"
+    },
+    {
+      "file": "src/applications/rowan_intro/rowan_intro_app.c",
+      "type": "insert_before",
+      "anchor": "    TrainerInfo_SetNameFromString(\n        SaveData_GetTrainerInfo(manager->saveData),\n        manager->playerNamingScreenArgs->textInputStr);\n",
+      "text": "    // PokePat mod platinum-defined-protagonist\n    String_CopyChars(manager->playerNamingScreenArgs->textInputStr, sDefinedPlayerName);\n    String_CopyChars(manager->rivalNamingScreenArgs->textInputStr, sDefinedRivalName);\n    manager->playerNamingScreenArgs->playerGenderOrMonSpecies = DEFINED_PROTAGONIST_GENDER;\n\n"
+    }
+  ],
+  "settings": [
+    {
+      "label": "Player name",
+      "file": "include/defined_protagonist.h",
+      "before": "sDefinedPlayerName[] = { ",
+      "after": "CHAR_EOS };",
+      "kind": "name",
+      "max_length": 7,
+      "hint": "up to 7 characters"
+    },
+    {
+      "label": "Rival name (Barry)",
+      "file": "include/defined_protagonist.h",
+      "before": "sDefinedRivalName[] = { ",
+      "after": "CHAR_EOS };",
+      "kind": "name",
+      "max_length": 7,
+      "hint": "up to 7 characters"
+    },
+    {
+      "label": "Gender",
+      "file": "include/defined_protagonist.h",
+      "before": "#define DEFINED_PROTAGONIST_GENDER ",
+      "after": "\n",
+      "kind": "choice",
+      "choices": [
+        "GENDER_MALE",
+        "GENDER_FEMALE"
+      ],
+      "hint": "GENDER_MALE = Lucas, GENDER_FEMALE = Dawn"
+    }
+  ],
+  "usage": "Change \"Player name\", \"Rival name\" and \"Gender\" under Settings and build the ROM; start a new game to see it (existing saves keep their names)."
+}

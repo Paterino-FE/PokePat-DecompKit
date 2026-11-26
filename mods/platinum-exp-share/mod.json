@@ -1,0 +1,127 @@
+{
+  "id": "platinum-exp-share",
+  "name": "Exp. Share as an on/off key item",
+  "version": "1.0.0",
+  "author": "PokePat",
+  "game": "platinum",
+  "category": "Battle",
+  "description": "The Exp. Share becomes a key item that is switched on and off from the bag (or the registered-item button) instead of being held. While it is on, the Pokémon that battled share the normal Exp. and every other healthy party member gets half of it. The setting is stored in the save file (flag FLAG_EXP_SHARE_ENABLED). When it is off, the original rules apply.",
+  "files": [],
+  "edits": [
+    {
+      "file": "include/constants/items.h",
+      "type": "insert_after",
+      "anchor": "#define ITEM_USE_FUNC_GRACIDEA     24\n",
+      "text": "#define ITEM_USE_FUNC_EXP_SHARE    25\n"
+    },
+    {
+      "file": "include/constants/savedata/vars_flags.h",
+      "type": "insert_after",
+      "anchor": "#define NUM_VARS (VARS_END - VARS_START)\n",
+      "text": "#define FLAG_EXP_SHARE_ENABLED FLAG_UNUSED_0x053C\n"
+    },
+    {
+      "file": "res/items/data/exp_share.json",
+      "type": "replace",
+      "anchor": "    \"An item to be held by a Pokémon.\\n\",\n    \"The holder gets a share of a battle’s\\n\",\n    \"Exp. Points without battling.\"",
+      "text": "    \"Turn it on to share a battle’s\\n\",\n    \"Exp. Points with all of your\\n\",\n    \"Pokémon. Use it again to turn it off.\""
+    },
+    {
+      "file": "res/items/data/exp_share.json",
+      "type": "replace",
+      "anchor": "\"holdEffect\": \"HOLD_EFFECT_EXP_SHARE\",",
+      "text": "\"holdEffect\": \"HOLD_EFFECT_NONE\","
+    },
+    {
+      "file": "res/items/data/exp_share.json",
+      "type": "replace",
+      "anchor": "\"preventToss\": false,\n  \"canRegister\": false,\n  \"fieldPocket\": \"POCKET_ITEMS\",",
+      "text": "\"preventToss\": true,\n  \"canRegister\": true,\n  \"fieldPocket\": \"POCKET_KEY_ITEMS\","
+    },
+    {
+      "file": "res/items/data/exp_share.json",
+      "type": "replace",
+      "anchor": "\"fieldUseFunc\": \"ITEM_USE_FUNC_NONE\",",
+      "text": "\"fieldUseFunc\": \"ITEM_USE_FUNC_EXP_SHARE\","
+    },
+    {
+      "file": "src/item_use_functions.c",
+      "type": "insert_after",
+      "anchor": "#include \"vars_flags.h\"\n",
+      "text": "#include \"constants/charcode.h\"\n"
+    },
+    {
+      "file": "src/item_use_functions.c",
+      "type": "insert_after",
+      "anchor": "static BOOL UseGracideaInField(ItemFieldUseContext *usageContext);\n",
+      "text": "static BOOL UseExpShareInField(ItemFieldUseContext *usageContext);\nstatic void UseExpShareFromMenu(ItemMenuUseContext *usageContext, const ItemUseContext *additionalContext);\n"
+    },
+    {
+      "file": "src/item_use_functions.c",
+      "type": "insert_after",
+      "anchor": "    [ITEM_USE_FUNC_GRACIDEA]     = { UseGracideaFromMenu,    UseGracideaInField,    NULL              },\n",
+      "text": "    [ITEM_USE_FUNC_EXP_SHARE]    = { UseExpShareFromMenu,    UseExpShareInField,    NULL              },\n"
+    },
+    {
+      "file": "src/item_use_functions.c",
+      "type": "insert_before",
+      "anchor": "static BOOL UseBicycleInField(ItemFieldUseContext *usageContext)\n{\n",
+      "text": "// PokePat mod platinum-exp-share: the Exp. Share is switched on and off.\nstatic const charcode_t sExpShareOnText[] = {\n    CHAR_E, CHAR_x, CHAR_p, CHAR_PERIOD, CHAR_SPACE,\n    CHAR_S, CHAR_h, CHAR_a, CHAR_r, CHAR_e, CHAR_SPACE,\n    CHAR_o, CHAR_n, CHAR_PERIOD, CHAR_EOS\n};\n\nstatic const charcode_t sExpShareOffText[] = {\n    CHAR_E, CHAR_x, CHAR_p, CHAR_PERIOD, CHAR_SPACE,\n    CHAR_S, CHAR_h, CHAR_a, CHAR_r, CHAR_e, CHAR_SPACE,\n    CHAR_o, CHAR_f, CHAR_f, CHAR_PERIOD, CHAR_EOS\n};\n\nstatic UnkStruct_02068EFC *CreateExpShareMessageData(const charcode_t *message)\n{\n    UnkStruct_02068EFC *v0 = Heap_Alloc(HEAP_ID_FIELD2, sizeof(UnkStruct_02068EFC));\n\n    v0->unk_16 = 0;\n    v0->unk_10 = String_Init(128, HEAP_ID_FIELD2);\n    String_CopyChars(v0->unk_10, message);\n\n    return v0;\n}\n\nstatic const charcode_t *ToggleExpShare(FieldSystem *fieldSystem)\n{\n    VarsFlags *varsFlags = SaveData_GetVarsFlags(fieldSystem->saveData);\n\n    if (VarsFlags_CheckFlag(varsFlags, FLAG_EXP_SHARE_ENABLED) == TRUE) {\n        VarsFlags_ClearFlag(varsFlags, FLAG_EXP_SHARE_ENABLED);\n        return sExpShareOffText;\n    }\n\n    VarsFlags_SetFlag(varsFlags, FLAG_EXP_SHARE_ENABLED);\n    return sExpShareOnText;\n}\n\nstatic void UseExpShareFromMenu(ItemMenuUseContext *usageContext, const ItemUseContext *additionalContext)\n{\n    FieldSystem *fieldSystem = FieldTask_GetFieldSystem(usageContext->fieldTask);\n    StartMenu *menu = FieldTask_GetEnv(usageContext->fieldTask);\n    const charcode_t *message = ToggleExpShare(fieldSystem);\n\n    FieldSystem_StartFieldMap(fieldSystem);\n    menu->callback = PrintRegisteredKeyItemUseMessage;\n    menu->taskData = CreateExpShareMessageData(message);\n    menu->state = START_MENU_STATE_NEW_TASK;\n}\n\nstatic BOOL UseExpShareInField(ItemFieldUseContext *usageContext)\n{\n    const charcode_t *message = ToggleExpShare(usageContext->fieldSystem);\n\n    FieldSystem_CreateTask(usageContext->fieldSystem, PrintRegisteredKeyItemUseMessage, CreateExpShareMessageData(message));\n    return FALSE;\n}\n\n"
+    },
+    {
+      "file": "include/struct_defs/battle_system.h",
+      "type": "insert_before",
+      "anchor": "    u8 *bgTileSnapshot;\n",
+      "text": "    SaveData *saveData; // PokePat mod platinum-exp-share\n"
+    },
+    {
+      "file": "src/battle/battle_main.c",
+      "type": "insert_after",
+      "anchor": "    battleSys->poketch = dto->poketch;\n",
+      "text": "    battleSys->saveData = dto->saveData; // PokePat mod platinum-exp-share\n"
+    },
+    {
+      "file": "src/battle/battle_script.c",
+      "type": "insert_after",
+      "anchor": "#include \"unk_0208C098.h\"\n",
+      "text": "#include \"vars_flags.h\"\n"
+    },
+    {
+      "file": "src/battle/battle_script.c",
+      "type": "insert_after",
+      "anchor": "        int totalMonsWithExpShare = 0;\n",
+      "text": "        BOOL expShareEnabled = VarsFlags_CheckFlag(SaveData_GetVarsFlags(battleSys->saveData), FLAG_EXP_SHARE_ENABLED); // PokePat mod platinum-exp-share\n"
+    },
+    {
+      "file": "src/battle/battle_script.c",
+      "type": "replace",
+      "anchor": "                u16 item = Pokemon_GetValue(mon, MON_DATA_HELD_ITEM, NULL);\n                if (BattleSystem_GetItemData(battleCtx, item, ITEM_PARAM_HOLD_EFFECT) == HOLD_EFFECT_EXP_SHARE) {\n                    totalMonsWithExpShare++;\n                }\n",
+      "text": "                u16 item = Pokemon_GetValue(mon, MON_DATA_HELD_ITEM, NULL);\n                if (expShareEnabled == TRUE || BattleSystem_GetItemData(battleCtx, item, ITEM_PARAM_HOLD_EFFECT) == HOLD_EFFECT_EXP_SHARE) {\n                    totalMonsWithExpShare++;\n                }\n"
+    },
+    {
+      "file": "src/battle/battle_script.c",
+      "type": "replace",
+      "anchor": "        if (totalMonsWithExpShare) {\n            battleCtx->gainedExp = (exp / 2) / totalMonsGainingExp;\n",
+      "text": "        if (totalMonsGainingExp == 0) {\n            totalMonsGainingExp = 1;\n        }\n\n        if (expShareEnabled == TRUE) {\n            // PokePat mod platinum-exp-share: the battlers share the full Exp., everyone else gets half of it.\n            battleCtx->gainedExp = exp / totalMonsGainingExp;\n\n            if (battleCtx->gainedExp == 0) {\n                battleCtx->gainedExp = 1;\n            }\n\n            battleCtx->sharedExp = exp / 2;\n\n            if (battleCtx->sharedExp == 0) {\n                battleCtx->sharedExp = 1;\n            }\n        } else if (totalMonsWithExpShare) {\n            battleCtx->gainedExp = (exp / 2) / totalMonsGainingExp;\n"
+    },
+    {
+      "file": "src/battle/battle_script.c",
+      "type": "replace",
+      "anchor": "    int item;\n    int itemEffect;\n\n    battler = data->battleCtx->faintedMon >> 1 & 1; // init to the side with the fainted mon",
+      "text": "    int item;\n    int itemEffect;\n    BOOL expShareEnabled = VarsFlags_CheckFlag(SaveData_GetVarsFlags(data->battleSys->saveData), FLAG_EXP_SHARE_ENABLED); // PokePat mod platinum-exp-share\n\n    battler = data->battleCtx->faintedMon >> 1 & 1; // init to the side with the fainted mon"
+    },
+    {
+      "file": "src/battle/battle_script.c",
+      "type": "replace",
+      "anchor": "        if (itemEffect == HOLD_EFFECT_EXP_SHARE || (data->battleCtx->sideGetExpMask[battler] & FlagIndex(slot))) {\n            break;\n        }",
+      "text": "        if (itemEffect == HOLD_EFFECT_EXP_SHARE || (data->battleCtx->sideGetExpMask[battler] & FlagIndex(slot))\n            || (expShareEnabled == TRUE && Pokemon_GetValue(mon, MON_DATA_SPECIES, NULL) != SPECIES_NONE && Pokemon_GetValue(mon, MON_DATA_HP, NULL) != 0)) {\n            break;\n        }"
+    },
+    {
+      "file": "src/battle/battle_script.c",
+      "type": "replace",
+      "anchor": "            if (data->battleCtx->sideGetExpMask[battler] & FlagIndex(slot)) {\n                totalExp = data->battleCtx->gainedExp;\n            }\n\n            if (itemEffect == HOLD_EFFECT_EXP_SHARE) {\n                totalExp += data->battleCtx->sharedExp;\n            }\n",
+      "text": "            if (expShareEnabled == TRUE) {\n                // PokePat mod platinum-exp-share: battlers get their share, everyone else half of the Exp.\n                if ((data->battleCtx->sideGetExpMask[battler] & FlagIndex(slot)) || slot == data->battleCtx->selectedPartySlot[expBattler]) {\n                    totalExp = data->battleCtx->gainedExp;\n                } else {\n                    totalExp = data->battleCtx->sharedExp;\n                }\n            } else {\n                if (data->battleCtx->sideGetExpMask[battler] & FlagIndex(slot)) {\n                    totalExp = data->battleCtx->gainedExp;\n                }\n\n                if (itemEffect == HOLD_EFFECT_EXP_SHARE) {\n                    totalExp += data->battleCtx->sharedExp;\n                }\n            }\n"
+    }
+  ],
+  "usage": "Give the player ITEM_EXP_SHARE (it goes to the key items pocket). Using it shows \"Exp. Share on.\" / \"Exp. Share off.\". Uses the unused save flag 0x053C – do not use FLAG_UNUSED_0x053C for anything else."
+}

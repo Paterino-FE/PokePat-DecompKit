@@ -5,7 +5,10 @@ using TilesetEditor.Core.Project;
 
 namespace TilesetEditor.Core.GameData;
 
-/// <summary>Adds a trainer class: "#define TRAINER_CLASS_X n" before TRAINER_CLASS_COUNT (count + 1) and an entry in gTrainerClasses.</summary>
+/// <summary>
+/// Adds a trainer class: "#define TRAINER_CLASS_X n" before TRAINER_CLASS_COUNT (count + 1), or in expansion 1.13+ an
+/// enumerator before TRAINER_CLASS_COUNT in enum TrainerClassID, and an entry in gTrainerClasses.
+/// </summary>
 public static partial class TrainerClasses
 {
     public const string ConstantsFile = "include/constants/trainers.h";
@@ -54,7 +57,12 @@ public static partial class TrainerClasses
     {
         if (CheckConstant(constants, constant) is { } problem) throw new InvalidOperationException(problem);
         var count = CountDefine().Match(constants);
-        if (!count.Success) throw new InvalidOperationException($"TRAINER_CLASS_COUNT was not found in {ConstantsFile}.");
+        if (!count.Success)
+        {
+            // expansion 1.13+: enum TrainerClassID { …, TRAINER_CLASS_COUNT, };
+            var (enumConstants, enumValue) = AddEnumerator(constants, constant);
+            return new AddResult(enumConstants, AddEntry(table, constant, name, money, ball), enumValue);
+        }
         var defines = ClassDefine().Matches(constants).Where(m => m.Groups[1].Value != "TRAINER_CLASS_COUNT").ToList();
         bool upperHex = defines.Any(d => d.Groups[2].Value.StartsWith("0x", StringComparison.OrdinalIgnoreCase) && d.Groups[2].Value.Skip(2).Any(char.IsUpper));
         string countValue = count.Groups[3].Value;
@@ -98,6 +106,25 @@ public static partial class TrainerClasses
         updated = updated[..insertAt] + line + nl + updated[insertAt..];
 
         return new AddResult(updated, AddEntry(table, constant, name, money, ball), (int)value);
+    }
+
+    /// <summary>Inserts "TRAINER_CLASS_X," before TRAINER_CLASS_COUNT in its enum, indented like the line it goes before.</summary>
+    private static (string Constants, int Value) AddEnumerator(string constants, string constant)
+    {
+        var enumerators = CDefines.Enumerators(constants);
+        var count = enumerators.FirstOrDefault(e => e.Name == "TRAINER_CLASS_COUNT")
+            ?? throw new InvalidOperationException($"TRAINER_CLASS_COUNT was not found in {ConstantsFile}.");
+        if (count.Expression.Contains('=') || !count.Expression.StartsWith('('))
+            throw new InvalidOperationException($"TRAINER_CLASS_COUNT has an explicit value ({count.Expression}); the toolkit can only add before an automatic count.");
+        var defines = new CDefines();
+        defines.AddFromText(constants);
+        long value = defines.TryEvaluate("TRAINER_CLASS_COUNT") ?? throw new InvalidOperationException("The value of TRAINER_CLASS_COUNT could not be determined.");
+        if (value >= MaxClasses) throw new InvalidOperationException($"There are already {value} trainer classes; the trainer data stores the class in one byte (at most {MaxClasses}).");
+        string nl = constants.Contains("\r\n") ? "\r\n" : "\n";
+        int lineStart = constants.LastIndexOf('\n', count.Index) + 1;
+        string indent = constants[lineStart..count.Index];
+        if (indent.Trim().Length != 0) throw new InvalidOperationException("TRAINER_CLASS_COUNT does not start its own line in " + ConstantsFile + ".");
+        return (constants[..lineStart] + indent + constant + "," + nl + constants[lineStart..], (int)value);
     }
 
     /// <summary>Appends "[TRAINER_CLASS_X] = { _("NAME"), money, ball }," after the last entry of gTrainerClasses, in its layout.</summary>

@@ -146,7 +146,8 @@ public static partial class SecretBaseCatalog
         {
             var g = data.Groups.FirstOrDefault(x => x.Constant == m.Groups[1].Value);
             if (g == null) { data.Problems.Add($"sSecretBaseEntrancePositions names {m.Groups[1].Value}, which is not a secret base group."); continue; }
-            g.MapConstant = "MAP_" + m.Groups[2].Value;
+            // MAP_NUM(SECRET_BASE_X) up to expansion 1.12, MAP_NUM(MAP_SECRET_BASE_X) later.
+            g.MapConstant = m.Groups[2].Value.StartsWith("MAP_", StringComparison.Ordinal) ? m.Groups[2].Value : "MAP_" + m.Groups[2].Value;
             g.WarpId = int.Parse(m.Groups[3].Value);
             g.PcX = int.Parse(m.Groups[4].Value);
             g.PcY = int.Parse(m.Groups[5].Value);

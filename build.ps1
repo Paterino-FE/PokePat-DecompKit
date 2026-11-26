@@ -51,5 +51,6 @@ if ($IntegrationTests) {
 if ($LASTEXITCODE -ne 0) { throw "publish (App) failed" }
 & $dotnet publish src\TilesetEditor.Cli -c $Configuration -r win-x64 --self-contained false -o (Join-Path $Output "cli")
 if ($LASTEXITCODE -ne 0) { throw "publish (CLI) failed" }
+Copy-Item (Join-Path $PSScriptRoot "mods") (Join-Path $Output "mods") -Recurse -Force   # mods shipped with PokePat
 Write-Host ""
 Write-Host "Done. Run: $(Join-Path $Output 'TilesetEditor.exe')"

@@ -74,12 +74,12 @@ public sealed class ProjectOverviewViewModel : ObservableObject, IToolkitModule
         }
         catch (ArgumentException ex)
         {
-            MessageBox.Show(Application.Current.MainWindow, ex.Message, "Porymap bridge", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDialog.Show(Application.Current.MainWindow, ex.Message, "Porymap bridge", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         if (plan.NothingToDo)
         {
-            MessageBox.Show(Application.Current.MainWindow, "Nothing to change.", "Porymap bridge", MessageBoxButton.OK, MessageBoxImage.Information);
+            AppDialog.Show(Application.Current.MainWindow, "Nothing to change.", "Porymap bridge", MessageBoxButton.OK, MessageBoxImage.Information);
             UpdateBridgeStatus();
             return;
         }
@@ -110,11 +110,11 @@ public sealed class ProjectOverviewViewModel : ObservableObject, IToolkitModule
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            MessageBox.Show(Application.Current.MainWindow, ex.Message, "Porymap bridge", MessageBoxButton.OK, MessageBoxImage.Error);
+            AppDialog.Show(Application.Current.MainWindow, ex.Message, "Porymap bridge", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         UpdateBridgeStatus();
         if (install)
-            MessageBox.Show(Application.Current.MainWindow, "Set up. Takes effect the next time the project is opened in Porymap (or in Porymap: Options → Custom Scripts… → Refresh Scripts).",
+            AppDialog.Show(Application.Current.MainWindow, "Set up. Takes effect the next time the project is opened in Porymap (or in Porymap: Options → Custom Scripts… → Refresh Scripts).",
                 "Porymap bridge", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 

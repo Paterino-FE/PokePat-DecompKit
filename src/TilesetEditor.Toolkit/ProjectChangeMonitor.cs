@@ -18,6 +18,9 @@ public sealed class ProjectChangeMonitor : IDisposable
         "src/graphics.c",
         "include/fieldmap.h",
         "include/global.fieldmap.h",
+        // pokeplatinum
+        "include/data/map_headers.h",
+        "meson.build",
         "Makefile",
         ".git/HEAD",
     ];

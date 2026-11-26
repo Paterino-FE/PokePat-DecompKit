@@ -17,6 +17,12 @@ public interface IToolkitModule
     string? UnsavedChangesDescription { get; }
 }
 
+/// <summary>A module that appears in the navigation only while it applies (e.g. while a mod is switched on).</summary>
+public interface IOptionalModule
+{
+    bool IsShown { get; }
+}
+
 /// <summary>Placeholder for modules of later stages, so the navigation shows the planned structure.</summary>
 public sealed class PlannedModule(string title, string description, string plan) : ObservableObject, IToolkitModule
 {

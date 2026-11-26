@@ -14,9 +14,9 @@
     <!-- Same RID set for build and publish, so the locked restore is identical in both. -->
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <RestoreConfigFile>$(MSBuildThisFileDirectory)nuget.config</RestoreConfigFile>
-    <Version>0.1.0</Version>
+    <Version>0.3.0</Version>
     <Company>PokéPat DecompKit</Company>
-    <Product>PokéPat DecompKit for pokeemerald-expansion</Product>
+    <Product>PokéPat DecompKit for pokeemerald-expansion and pokeplatinum</Product>
     <NeutralLanguage>en</NeutralLanguage>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>

@@ -323,7 +323,7 @@ public sealed class SecretBasesViewModel : ObservableObject, IToolkitModule
         set
         {
             if (_selectedDecoration == value) return;
-            if (DecorationEdited && MessageBox.Show(Application.Current.MainWindow, $"Discard the unsaved changes of {_selectedDecoration?.Constant}?", "Decorations",
+            if (DecorationEdited && AppDialog.Show(Application.Current.MainWindow, $"Discard the unsaved changes of {_selectedDecoration?.Constant}?", "Decorations",
                     MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             {
                 // Keep the selection; the grid is told to re-read it.
@@ -354,7 +354,7 @@ public sealed class SecretBasesViewModel : ObservableObject, IToolkitModule
         _editPrice = d.Price.ToString();
         _editDescription = d.Description.Replace("\n", "\r\n");
         RaiseEdits();
-        var shared = _decor?.Items.Where(o => o != d && o.DescriptionSymbol == d.DescriptionSymbol).Select(o => o.Constant).ToList() ?? [];
+        var shared = d.DescriptionInline ? [] : _decor?.Items.Where(o => o != d && o.DescriptionSymbol == d.DescriptionSymbol).Select(o => o.Constant).ToList() ?? [];
         DecorationDetails = $"{d.Constant} = {d.Id}\n" +
                             $"Category {d.CategoryText} · shape {d.ShapeText} · permission {d.PermissionText}\n" +
                             (d.IsSprite
@@ -397,11 +397,22 @@ public sealed class SecretBasesViewModel : ObservableObject, IToolkitModule
         var files = new List<PlannedFile>();
         try
         {
-            if (name != d.Name || price != d.Price)
+            // expansion 1.16+: the description is part of the header entry, so all three go into one edit of header.h.
+            bool inlineDesc = d.DescriptionInline && desc != d.Description;
+            if (name != d.Name || price != d.Price || inlineDesc)
                 files.Add(ProjectWriter.ModifyText(project.Root, Decorations.HeaderFile,
-                    t => Decorations.SetPrice(Decorations.SetName(t, d.Constant, name), d.Constant, price),
-                    $"{d.Constant}: " + string.Join(", ", new[] { name != d.Name ? $"name \"{d.Name}\" → \"{name}\"" : null, price != d.Price ? $"price {d.Price} → {price}" : null }.OfType<string>())));
-            if (desc != d.Description)
+                    t =>
+                    {
+                        t = Decorations.SetPrice(Decorations.SetName(t, d.Constant, name), d.Constant, price);
+                        return inlineDesc ? Decorations.SetInlineDescription(t, d.Constant, desc) : t;
+                    },
+                    $"{d.Constant}: " + string.Join(", ", new[]
+                    {
+                        name != d.Name ? $"name \"{d.Name}\" → \"{name}\"" : null,
+                        price != d.Price ? $"price {d.Price} → {price}" : null,
+                        inlineDesc ? "new description" : null,
+                    }.OfType<string>())));
+            if (!d.DescriptionInline && desc != d.Description)
                 files.Add(ProjectWriter.ModifyText(project.Root, Decorations.DescriptionFile, t => Decorations.SetDescription(t, d.DescriptionSymbol, desc),
                     $"{d.DescriptionSymbol}: new text"));
         }
@@ -411,7 +422,7 @@ public sealed class SecretBasesViewModel : ObservableObject, IToolkitModule
             return;
         }
         if (files.Count == 0) return;
-        var shared = _decor?.Items.Where(o => o != d && o.DescriptionSymbol == d.DescriptionSymbol).Select(o => o.Constant).ToList() ?? [];
+        var shared = d.DescriptionInline ? [] : _decor?.Items.Where(o => o != d && o.DescriptionSymbol == d.DescriptionSymbol).Select(o => o.Constant).ToList() ?? [];
         var notes = shared.Count > 0 && desc != d.Description ? new[] { $"The description is shared with {string.Join(", ", shared)} – they change too." } : [];
         if (!ProjectWriter.Apply(project.Root, $"Edit decoration {d.Constant}", "src/data/decoration", files, notes)) return;
         _editName = d.Name; _editPrice = d.Price.ToString(); _editDescription = d.Description; // not dirty while reloading
@@ -460,7 +471,7 @@ public sealed class SecretBasesViewModel : ObservableObject, IToolkitModule
             ProjectWriter.Warn("New decoration", ex.Message);
             return;
         }
-        if (result.ColorChanges.Count > 0 && MessageBox.Show(Application.Current.MainWindow,
+        if (result.ColorChanges.Count > 0 && AppDialog.Show(Application.Current.MainWindow,
                 "These colors are not in the palette and will be replaced:\n\n" +
                 string.Join("\n", result.ColorChanges.Take(12).Select(c => $"  {c.From.ToHex()} → {c.To.ToHex()}")) + "\n\nContinue?",
                 "Confirm color loss", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;

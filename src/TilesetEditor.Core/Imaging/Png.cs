@@ -345,6 +345,30 @@ public static class Png
         return Assemble(ihdr, raw, plte);
     }
 
+    /// <summary>A grayscale PNG whose samples are the values themselves (e.g. 4-bit: 0–15) – some game tools read colour numbers so.</summary>
+    public static byte[] EncodeGray(int width, int height, byte[] values, int bitDepth)
+    {
+        if (bitDepth is not (4 or 8)) throw new ArgumentOutOfRangeException(nameof(bitDepth));
+        int stride = (width * bitDepth + 7) / 8;
+        var raw = new byte[(stride + 1) * height];
+        for (int y = 0; y < height; y++)
+        {
+            int o = y * (stride + 1) + 1;
+            for (int x = 0; x < width; x++)
+            {
+                byte v = values[y * width + x];
+                if (bitDepth == 8) raw[o + x] = v;
+                else raw[o + x / 2] |= (byte)(x % 2 == 0 ? (v & 0xF) << 4 : v & 0xF);
+            }
+        }
+        var ihdr = new byte[13];
+        BinaryPrimitives.WriteInt32BigEndian(ihdr, width);
+        BinaryPrimitives.WriteInt32BigEndian(ihdr.AsSpan(4), height);
+        ihdr[8] = (byte)bitDepth;
+        ihdr[9] = (byte)PngColorType.Grayscale;
+        return Assemble(ihdr, raw, null);
+    }
+
     private static byte[] Assemble(byte[] ihdr, byte[] raw, byte[]? plte)
     {
         using var ms = new MemoryStream();

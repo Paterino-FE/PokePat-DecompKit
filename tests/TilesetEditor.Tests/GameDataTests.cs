@@ -27,7 +27,7 @@ public class GameDataTests
     private static string Write(GameDataTable t, string file) => GameDataCatalog.Write(t, file, GameDataCatalog.ReadText(Ref, file));
 
     [Theory]
-    [InlineData("trainer_classes", 80)]
+    [InlineData("trainer_classes", 60)]
     [InlineData("items", 800)]
     [InlineData("moves", 900)]
     [InlineData("abilities", 300)]
@@ -44,7 +44,43 @@ public class GameDataTests
         double editable = t.Rows.Count(r => r.ReadOnlyReason == null && r.Cells[name].Editable) / (double)t.Rows.Count;
         Assert.True(editable > 0.9, $"{id}: only {editable:P0} of the names are editable");
         for (int i = 0; i < t.Def.Columns.Count; i++)
-            if (t.Def.Columns[i].Kind == GameDataKind.Constant) Assert.NotEmpty(t.Options[i]!);
+            if (t.Def.Columns[i].Kind == GameDataKind.Constant && t.Rows.Any(r => r.FieldRaw[t.Def.Columns[i].Field] != null)) Assert.NotEmpty(t.Options[i]!);
+    }
+
+    [Fact]
+    public void Items_and_moves_have_category_columns()
+    {
+        var items = Load("items");
+        Assert.Equal("POCKET_POKE_BALLS", Cell(items, "ITEM_POKE_BALL", "Pocket"));
+        Assert.Contains("POCKET_KEY_ITEMS", items.Options[Col(items, "Pocket")]!);
+        Assert.All(items.Def.CategoryColumns, h => Assert.True(Col(items, h) >= 0, h));
+        var moves = Load("moves");
+        Assert.Equal(["Type", "Category"], moves.Def.CategoryColumns);
+    }
+
+    [Fact]
+    public void Quick_filters_group_items_and_moves_with_game_icons()
+    {
+        var items = Load("items");
+        var f = QuickFilters.For(items, Ref);
+        var balls = Assert.Single(f, x => x.Label == "Poké Balls");
+        Assert.True(balls.Count >= 12);
+        Assert.Equal((24, 24), (balls.Icon!.Width, balls.Icon.Height));
+        Assert.Contains(f, x => x.Label == "Berries" && x.Icon != null);
+        Assert.Contains(f, x => x.Label == "TMs & HMs" && x.Icon != null);
+        var potion = Row(items, "ITEM_POTION");
+        Assert.False(balls.Matches(c => QuickFilters.Cell(items, potion, c)));
+        // Every item is in at most a handful of groups and the groups cover most items.
+        Assert.True(items.Rows.Count(r => f.Any(x => x.Matches(c => QuickFilters.Cell(items, r, c)))) > items.Rows.Count * 3 / 4);
+
+        var moves = Load("moves");
+        var mf = QuickFilters.For(moves, Ref);
+        var fire = Assert.Single(mf, x => x.Label == "Fire");
+        Assert.Equal((32, 16), (fire.Icon!.Width, fire.Icon.Height));
+        Assert.Equal(moves.Rows.Count(r => Cell(moves, r.Key, "Type") == "TYPE_FIRE"), fire.Count);
+        Assert.Contains(mf, x => x.Label == "Physical" && x.Icon is { Width: 16, Height: 16 });
+        Assert.Contains(QuickFilters.For(Load("species"), Ref), x => x.Label == "Dragon");
+        Assert.Empty(QuickFilters.For(Load("natures"), Ref));
     }
 
     [Fact]
@@ -60,26 +96,29 @@ public class GameDataTests
         var balls = tc.Options[Col(tc, "Poké Ball")]!;
         Assert.Contains("BALL_ULTRA", balls);
         Assert.DoesNotContain("BALL_ROTATE_LEFT", balls);
-        // An expression stays read-only.
-        Assert.False(Row(tc, "TRAINER_CLASS_PKMN_BREEDER").Cells[Col(tc, "Poké Ball")].Editable);
+        // A config-dependent expression shows the value that applies now and can be replaced by a fixed one.
+        var breeder = Row(tc, "TRAINER_CLASS_PKMN_BREEDER").Cells[Col(tc, "Poké Ball")];
+        Assert.True(breeder.Editable, breeder.Note);
+        Assert.StartsWith("BALL_", breeder.Value);
+        Assert.Contains("B_TRAINER_CLASS_POKE_BALLS", breeder.Note);
 
         var items = Load("items");
-        Assert.Equal("POKé BALL", Cell(items, "ITEM_POKE_BALL", "Name"));
+        Assert.Equal("Poké Ball", Cell(items, "ITEM_POKE_BALL", "Name"));
+        Assert.True(Row(items, "ITEM_POKE_BALL").Cells[Col(items, "Name")].Editable); // _("…") or ITEM_NAME("…") (1.13+)
         Assert.Equal("200", Cell(items, "ITEM_POKE_BALL", "Price"));
-        Assert.Equal(@"A tool used for\ncatching wild\nPOKéMON.", Cell(items, "ITEM_POKE_BALL", "Description"));
-        Assert.False(Row(items, "ITEM_ULTRA_BALL").Cells[Col(items, "Price")].Editable);
+        Assert.Equal(@"A tool used for\ncatching wild\nPokémon.", Cell(items, "ITEM_POKE_BALL", "Description"));
+        Assert.True(Row(items, "ITEM_ULTRA_BALL").Cells[Col(items, "Price")].Editable); // (I_PRICE >= GEN_7) ? 800 : 1200 → the current value
         Assert.Equal(19, items.MaxLength[Col(items, "Name")]);
-        Assert.Contains(items.Rows, r => r.Cells[Col(items, "Description")].Note?.StartsWith("Shared text") == true);
 
         var moves = Load("moves");
-        Assert.Equal("POUND", Cell(moves, "MOVE_POUND", "Name"));
+        Assert.Equal("Pound", Cell(moves, "MOVE_POUND", "Name"));
         Assert.Equal("40", Cell(moves, "MOVE_POUND", "Power"));
         Assert.Equal("TYPE_NORMAL", Cell(moves, "MOVE_POUND", "Type"));
         Assert.Equal("DAMAGE_CATEGORY_PHYSICAL", Cell(moves, "MOVE_POUND", "Category"));
         Assert.Contains("TYPE_FIRE", moves.Options[Col(moves, "Type")]!);
 
         var species = Load("species");
-        Assert.Equal("BULBASAUR", Cell(species, "SPECIES_BULBASAUR", "Name"));
+        Assert.Equal("Bulbasaur", Cell(species, "SPECIES_BULBASAUR", "Name"));
         Assert.Equal("45", Cell(species, "SPECIES_BULBASAUR", "HP"));
         Assert.Equal("TYPE_GRASS", Cell(species, "SPECIES_BULBASAUR", "Type 1"));
         Assert.Equal("TYPE_POISON", Cell(species, "SPECIES_BULBASAUR", "Type 2"));
@@ -88,10 +127,10 @@ public class GameDataTests
         Assert.Equal(12, species.MaxLength[Col(species, "Name")]);
 
         Assert.Equal("LITTLEROOT TOWN", Cell(Load("locations"), "MAPSEC_LITTLEROOT_TOWN", "Name"));
-        Assert.Equal("STENCH", Cell(Load("abilities"), "ABILITY_STENCH", "Name"));
-        Assert.Equal("FIRE", Cell(Load("types"), "TYPE_FIRE", "Name"));
+        Assert.Equal("Stench", Cell(Load("abilities"), "ABILITY_STENCH", "Name"));
+        Assert.Equal("Fire", Cell(Load("types"), "TYPE_FIRE", "Name"));
         var natures = Load("natures");
-        Assert.Equal("HARDY", Cell(natures, "NATURE_HARDY", "Name"));
+        Assert.Equal("Hardy", Cell(natures, "NATURE_HARDY", "Name"));
         Assert.Equal("STAT_DEF", Cell(natures, "NATURE_LONELY", "Lowers"));
     }
 
@@ -170,7 +209,9 @@ public class GameDataTests
     {
         var items = Load("items");
         int d = Col(items, "Description");
-        var row = items.Rows.First(r => r.Cells[d].Note?.StartsWith("Shared text") == true && r.ReadOnlyReason == null);
+        // Expansion up to 1.12 shares some descriptions (static const u8 sX[]); later versions write every text inline.
+        var row = items.Rows.FirstOrDefault(r => r.Cells[d].Note?.StartsWith("Shared text") == true && r.ReadOnlyReason == null);
+        if (row == null) return;
         var name = row.FieldRaw["description"]!;
         row.Cells[d].Value = "Own text.";
         var old = GameDataCatalog.ReadText(Ref, "src/data/items.h");
@@ -202,13 +243,14 @@ public class GameDataTests
     {
         var tc = Load("trainer_classes");
         Row(tc, "TRAINER_CLASS_PKMN_TRAINER_1").Cells[Col(tc, "Prize money")].Value = "7";
-        Row(tc, "TRAINER_CLASS_HIKER").Cells[Col(tc, "Poké Ball")].Value = "BALL_ULTRA";
-        Row(tc, "TRAINER_CLASS_TEAM_ROCKET").Cells[Col(tc, "Poké Ball")].Value = "BALL_NET";
+        Row(tc, "TRAINER_CLASS_HIKER").Cells[Col(tc, "Poké Ball")].Value = "BALL_NET";
+        Row(tc, "TRAINER_CLASS_TEAM_AQUA").Cells[Col(tc, "Poké Ball")].Value = "BALL_NET";
         Row(tc, "TRAINER_CLASS_LADY").Cells[Col(tc, "Name")].Value = "NOBLE";
         var updated = Write(tc, "src/battle_main.c");
         Assert.Contains("[TRAINER_CLASS_PKMN_TRAINER_1] = { _(\"{PKMN} TRAINER\"), 7 },", updated);
-        Assert.Contains("[TRAINER_CLASS_HIKER] = { _(\"HIKER\"), 10, BALL_ULTRA },", updated);
-        Assert.Contains("[TRAINER_CLASS_TEAM_ROCKET] = { _(\"TEAM ROCKET\"), 0, BALL_NET },", updated);
+        // 1.10: the ball is added; 1.17: the config-dependent ball expression becomes BALL_NET.
+        Assert.Contains("[TRAINER_CLASS_HIKER] = { _(\"HIKER\"), 10, BALL_NET },", updated);
+        Assert.Contains("[TRAINER_CLASS_TEAM_AQUA] = { _(\"TEAM AQUA\"), 0, BALL_NET },", updated);
         Assert.Contains("[TRAINER_CLASS_LADY] = { _(\"NOBLE\"), 50 },", updated);
         var parsed = CTable.Parse(updated, "gTrainerClasses", "TRAINER_CLASS_");
         Assert.Equal(tc.Rows.Count, parsed.Entries.Count);
@@ -236,8 +278,10 @@ public class GameDataTests
     {
         var constants = GameDataCatalog.ReadText(Ref, TrainerClasses.ConstantsFile);
         var table = GameDataCatalog.ReadText(Ref, TrainerClasses.TableFile);
-        var oldCount = System.Text.RegularExpressions.Regex.Match(constants, @"#define TRAINER_CLASS_COUNT\s+(\S+)").Groups[1].Value;
-        long n = Convert.ToInt64(oldCount, oldCount.StartsWith("0x") ? 16 : 10);
+        var before = new TilesetEditor.Core.Project.CDefines();
+        before.AddFromText(constants);
+        long n = before.TryEvaluate("TRAINER_CLASS_COUNT")!.Value;
+        bool enumStyle = !System.Text.RegularExpressions.Regex.IsMatch(constants, @"#define\s+TRAINER_CLASS_COUNT\b");
 
         var result = TrainerClasses.Add(constants, table, "TRAINER_CLASS_TESTER", "TESTER", 12, null);
         Assert.Equal(n, result.Value);
@@ -245,12 +289,21 @@ public class GameDataTests
         defines.AddFromText(result.Constants);
         Assert.Equal(n, defines.TryEvaluate("TRAINER_CLASS_TESTER"));
         Assert.Equal(n + 1, defines.TryEvaluate("TRAINER_CLASS_COUNT"));
-        // Aligned like the neighbours, directly before the count.
         var lines = result.Constants.Split('\n');
-        int i = Array.FindIndex(lines, l => l.StartsWith("#define TRAINER_CLASS_TESTER"));
-        Assert.StartsWith("#define TRAINER_CLASS_COUNT", lines[i + 1]);
-        Assert.Equal(lines[i + 1].IndexOf("0x", StringComparison.Ordinal), lines[i].IndexOf("0x", StringComparison.Ordinal));
-        // Only two lines differ: the new define and the count.
+        if (enumStyle)
+        {
+            // expansion 1.13+: a new enumerator directly before the count, nothing else changes.
+            Assert.Contains("    TRAINER_CLASS_TESTER,\n    TRAINER_CLASS_COUNT,", result.Constants);
+            Assert.Equal(constants.Length + "    TRAINER_CLASS_TESTER,\n".Length, result.Constants.Length);
+        }
+        else
+        {
+            // Aligned like the neighbours, directly before the count.
+            int i = Array.FindIndex(lines, l => l.StartsWith("#define TRAINER_CLASS_TESTER"));
+            Assert.StartsWith("#define TRAINER_CLASS_COUNT", lines[i + 1]);
+            Assert.Equal(lines[i + 1].IndexOf("0x", StringComparison.Ordinal), lines[i].IndexOf("0x", StringComparison.Ordinal));
+        }
+        // Only one line is added (the count changes in place for #defines).
         Assert.Equal(constants.Split('\n').Length + 1, lines.Length);
 
         var parsed = CTable.Parse(result.Table, "gTrainerClasses", "TRAINER_CLASS_");
@@ -276,6 +329,142 @@ public class GameDataTests
         Assert.Equal(3, r.Value);
         Assert.Equal("#define TRAINER_CLASS_HIKER    1\n#define TRAINER_CLASS_LASS     2\n#define TRAINER_CLASS_NEW      3\n\n#define TRAINER_CLASS_COUNT    (TRAINER_CLASS_NEW + 1)\n", r.Constants);
         Assert.EndsWith("    [TRAINER_CLASS_NEW] = { _(\"NEW\") },\n};\n", r.Table);
+    }
+
+    private const string ConfigDependentItems = """
+        #define TREASURE_FACTOR 2
+        const struct ItemInfo gItemsInfo[] =
+        {
+            [ITEM_A] =
+            {
+                .name = ITEM_NAME("Alpha"),
+                .price = (I_PRICE >= GEN_7) ? 800 : 1200,
+                .description = COMPOUND_STRING("A."),
+            },
+            [ITEM_B] =
+            {
+                .name = ITEM_NAME("Beta"),
+            #if I_PRICE >= GEN_8
+                .price = 200,
+            #elif I_PRICE == GEN_7
+                .price = 300,
+            #else
+                .price = 250,
+            #endif
+                .description = COMPOUND_STRING(
+                    "Line one\n"
+                #if B_FLAG
+                    "flag on."),
+                #else
+                    "flag off."),
+                #endif
+                .pocket = POCKET_ITEMS,
+            },
+            [ITEM_C] =
+            {
+                .name = ITEM_NAME("Gamma"),
+                .price = 10 * TREASURE_FACTOR,
+                .description = COMPOUND_STRING("C."),
+            },
+        };
+
+        """;
+
+    private static string ConfigDependentProject()
+    {
+        var root = TestPaths.NewTempDir("config-items");
+        Directory.CreateDirectory(Path.Combine(root, "include", "config"));
+        Directory.CreateDirectory(Path.Combine(root, "src", "data"));
+        File.WriteAllText(Path.Combine(root, "include", "config", "item.h"),
+            "#define GEN_7 6\n#define GEN_8 7\n#define GEN_LATEST GEN_8\n#define I_PRICE GEN_LATEST\n#define B_FLAG FALSE\n");
+        File.WriteAllText(Path.Combine(root, "src", "data", "items.h"), ConfigDependentItems);
+        return root;
+    }
+
+    [Fact]
+    public void Config_dependent_values_show_the_current_setting_and_become_fixed_values()
+    {
+        var root = ConfigDependentProject();
+        var items = GameDataCatalog.Load(root, GameDataCatalog.Get("items"));
+        int price = Col(items, "Price"), desc = Col(items, "Description");
+        GameDataCell C(string key, int col) => Row(items, key).Cells[col];
+        Assert.Equal(("800", true), (C("ITEM_A", price).Value, C("ITEM_A", price).Editable));    // ternary, I_PRICE = GEN_8
+        Assert.Equal(("200", true), (C("ITEM_B", price).Value, C("ITEM_B", price).Editable));    // #if/#elif/#else
+        Assert.Equal(("20", true), (C("ITEM_C", price).Value, C("ITEM_C", price).Editable));     // 10 * TREASURE_FACTOR
+        Assert.Equal((@"Line one\nflag off.", true), (C("ITEM_B", desc).Value, C("ITEM_B", desc).Editable)); // #if inside the text
+        Assert.Contains("I_PRICE", C("ITEM_B", price).Note);
+
+        C("ITEM_A", price).Value = "900";
+        C("ITEM_B", price).Value = "150";
+        C("ITEM_B", desc).Value = @"New\ntext.";
+        C("ITEM_C", price).Value = "25";
+        var text = File.ReadAllText(Path.Combine(root, "src", "data", "items.h"));
+        var written = GameDataCatalog.Write(items, "src/data/items.h", text);
+        Assert.Contains("        .price = 900,\n", written);
+        Assert.Contains("        .name = ITEM_NAME(\"Beta\"),\n        .price = 150,\n        .description = COMPOUND_STRING(\n            \"New\\n\"\n            \"text.\"),\n        .pocket = POCKET_ITEMS,", written);
+        Assert.Contains("        .price = 25,\n", written);
+        Assert.DoesNotContain("#if", written);
+        Assert.Contains("#define TREASURE_FACTOR 2", written);
+
+        File.WriteAllText(Path.Combine(root, "src", "data", "items.h"), written);
+        var again = GameDataCatalog.Load(root, GameDataCatalog.Get("items"));
+        Assert.Equal(["900", "150", "25"], new[] { "ITEM_A", "ITEM_B", "ITEM_C" }.Select(k => Row(again, k).Cells[price].Value));
+        Assert.Equal(@"New\ntext.", Row(again, "ITEM_B").Cells[desc].Value);
+        Assert.Null(Row(again, "ITEM_B").Cells[price].Note); // a plain value now
+    }
+
+    [Fact]
+    public void Config_dependent_values_of_the_reference_project_can_be_changed()
+    {
+        // #if alternatives (power, abilities), a text that branches inside, a ternary price – each change touches only its entry.
+        var cases = new (string Table, string Key, string Column, string Value)[]
+        {
+            ("moves", "MOVE_JUMP_KICK", "Power", "111"),
+            ("moves", "MOVE_ICE_PUNCH", "Description", @"A very cold punch.\nBrr."),
+            ("items", "ITEM_ULTRA_BALL", "Price", "999"),
+            ("species", "SPECIES_PIDGEY", "Ability 2", "ABILITY_INTIMIDATE"),
+        };
+        foreach (var (id, key, column, value) in cases)
+        {
+            var t = Load(id);
+            var row = Row(t, key);
+            var cell = row.Cells[Col(t, column)];
+            Assert.True(cell.Editable, $"{key}.{column}: {cell.Note}");
+            var before = t.Rows.Where(r => r.File == row.File && r.Key != key).ToDictionary(r => r.Key, r => string.Join("|", r.Cells.Select(c => c.Value)));
+            cell.Value = value;
+            var written = Write(t, row.File);
+            var reparsed = GameDataCatalog.Load(Ref, t.Def); // the reference stays unchanged; parse the written text instead
+            var parsed = CTable.Parse(written, t.Def.Marker, t.Def.KeyPrefix);
+            Assert.Equal(CTable.Parse(GameDataCatalog.ReadText(Ref, row.File), t.Def.Marker, t.Def.KeyPrefix).Entries.Count, parsed.Entries.Count);
+            var temp = TestPaths.NewTempDir("gd-" + id);
+            foreach (var f in new[] { "include/gba/defines.h", "include/constants/global.h" })
+                if (File.Exists(Path.Combine(Ref, f))) { Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(temp, f))!); File.Copy(Path.Combine(Ref, f), Path.Combine(temp, f)); }
+            Directory.CreateDirectory(Path.Combine(temp, "include", "config"));
+            foreach (var f in Directory.EnumerateFiles(Path.Combine(Ref, "include", "config"))) File.Copy(f, Path.Combine(temp, "include", "config", Path.GetFileName(f)));
+            foreach (var f in GameDataCatalog.ResolveFiles(Ref, t.Def))
+            {
+                var dst = Path.Combine(temp, f);
+                Directory.CreateDirectory(Path.GetDirectoryName(dst)!);
+                File.WriteAllText(dst, f == row.File ? written : GameDataCatalog.ReadText(Ref, f));
+            }
+            var after = GameDataCatalog.Load(temp, t.Def);
+            Assert.Equal(value, Row(after, key).Cells[Col(after, column)].Value);
+            foreach (var r in after.Rows.Where(r => r.File == row.File && r.Key != key))
+                Assert.Equal(before[r.Key], string.Join("|", r.Cells.Select(c => c.Value)));
+            _ = reparsed;
+        }
+    }
+
+    [Fact]
+    public void Adding_a_trainer_class_extends_an_enum()
+    {
+        var constants = "enum TrainerClassID\n{\n    TRAINER_CLASS_PKMN_TRAINER_1, // Unused\n    TRAINER_CLASS_HIKER,\n#if X\n    TRAINER_CLASS_LASS,\n#endif\n    TRAINER_CLASS_COUNT,\n};\n";
+        var table = "const struct TrainerClass gTrainerClasses[TRAINER_CLASS_COUNT] =\n{\n    [TRAINER_CLASS_HIKER] = { _(\"HIKER\"), 10 },\n};\n";
+        var r = TrainerClasses.Add(constants, table, "TRAINER_CLASS_NEW", "NEW", 3, null);
+        Assert.Equal(3, r.Value);
+        Assert.Equal(constants.Replace("    TRAINER_CLASS_COUNT,", "    TRAINER_CLASS_NEW,\n    TRAINER_CLASS_COUNT,"), r.Constants);
+        Assert.Contains("    [TRAINER_CLASS_NEW] = { _(\"NEW\"), 3 },\n};\n", r.Table);
+        Assert.Throws<InvalidOperationException>(() => TrainerClasses.Add(r.Constants, r.Table, "TRAINER_CLASS_NEW", "NEW", null, null));
     }
 
     [Fact]

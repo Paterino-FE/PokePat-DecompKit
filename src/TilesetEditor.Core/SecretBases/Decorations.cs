@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using TilesetEditor.Core.GameData;
 using TilesetEditor.Core.Project;
 using TilesetEditor.Core.Trainers;
 
@@ -16,8 +17,11 @@ public sealed class Decoration
     public string Category { get; set; } = "";
     public int Price { get; set; }
     public string PriceRaw { get; set; } = "";
+    /// <summary>DecorDesc_X in description.h, or "" when the text is written in the header entry (expansion 1.16+).</summary>
     public string DescriptionSymbol { get; set; } = "";
     public string Description { get; set; } = "";
+    /// <summary>.description = COMPOUND_STRING("…") directly in gDecorations (expansion 1.16+).</summary>
+    public bool DescriptionInline { get; set; }
     public string TilesSymbol { get; set; } = "";
     public List<string> Tiles { get; } = [];
     public bool HasHeaderEntry { get; set; }
@@ -49,11 +53,17 @@ public sealed class DecorationData
     public List<string> Problems { get; } = [];
     public Dictionary<string, int> MetatileLabels { get; set; } = [];
     public int MaxId => Items.Count == 0 ? 0 : Items.Max(i => i.Id);
+    /// <summary>
+    /// expansion 1.16+ ("consolidated"): description and icon are fields of the gDecorations entry; description.h and
+    /// icon.h (gDecorIconTable) no longer exist.
+    /// </summary>
+    public bool Consolidated { get; set; }
 }
 
 /// <summary>
 /// Reads and edits the decoration tables: include/constants/decorations.h, src/data/decoration/{header,description,tiles,icon}.h and
 /// src/data/graphics/decorations.h. Edits change only the touched value; unchanged values give byte-identical text.
+/// expansion 1.16+ keeps description and icon in the header entry (.description = COMPOUND_STRING(…), .icon = {pic, pal}).
 /// </summary>
 public static partial class Decorations
 {
@@ -91,8 +101,8 @@ public static partial class Decorations
     [GeneratedRegex(@"\[(DECOR_\w+)\]\s*=\s*\{\s*(\w+)\s*,\s*(\w+)\s*\}")]
     private static partial Regex IconEntry();
 
-    [GeneratedRegex(@"const\s+u32\s+(\w+)\[\]\s*=\s*INCBIN_U32\(\s*""([^""]+)""\s*\)")]
-    private static partial Regex Incbin();
+    [GeneratedRegex(@"^\{\s*(\w+)\s*,\s*(\w+)\s*\}$")]
+    private static partial Regex IconField();
 
     [GeneratedRegex(@"^_\(""(.*)""\)$", RegexOptions.Singleline)]
     private static partial Regex NameValue();
@@ -111,6 +121,7 @@ public static partial class Decorations
             return File.Exists(p) ? File.ReadAllText(p) : "";
         }
         var data = Parse(Read(ConstantsFile), Read(HeaderFile), Read(DescriptionFile), Read(TilesFile), Read(IconTableFile), Read(IconGraphicsFile));
+        data.Consolidated |= !File.Exists(ProjectPaths.Combine(root, DescriptionFile)) && !File.Exists(ProjectPaths.Combine(root, IconTableFile));
         data.MetatileLabels = SecretBaseCatalog.ParseMetatileLabels(Read(SecretBaseCatalog.MetatileLabelsFile));
         foreach (var d in data.Items)
             if (d.IconPng != null && !File.Exists(ProjectPaths.Combine(root, d.IconPng))) d.IconPng = null;
@@ -128,9 +139,10 @@ public static partial class Decorations
             gfx.TryAdd(m.Groups[1].Value, StripComments(m.Groups[2].Value).Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToList());
         var iconEntries = new Dictionary<string, (string Pic, string Pal)>(StringComparer.Ordinal);
         foreach (Match m in IconEntry().Matches(icons)) iconEntries.TryAdd(m.Groups[1].Value, (m.Groups[2].Value, m.Groups[3].Value));
-        var incbins = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (Match m in Incbin().Matches(iconGraphics)) incbins.TryAdd(m.Groups[1].Value, m.Groups[2].Value);
+        var iconFiles = GraphicsIncludes.BySymbol(iconGraphics);
         var entries = ParseHeader(header);
+        bool iconTable = icons.Trim().Length > 0;
+        data.Consolidated = !iconTable && descriptions.Trim().Length == 0 && entries.Values.Any(f => f.Any(x => x.Name == "icon"));
 
         foreach (Match c in ConstantDefine().Matches(constants))
         {
@@ -147,8 +159,18 @@ public static partial class Decorations
                 d.Category = F("category");
                 d.PriceRaw = F("price");
                 d.Price = int.TryParse(d.PriceRaw, out var p) ? p : 0;
-                d.DescriptionSymbol = F("description");
-                d.Description = descs.GetValueOrDefault(d.DescriptionSymbol, "");
+                var descRaw = F("description");
+                if (CString.TryRead(descRaw) is { } inline)
+                {
+                    d.DescriptionInline = true;
+                    d.Description = Unescape(inline);
+                }
+                else
+                {
+                    d.DescriptionSymbol = descRaw;
+                    d.Description = descs.GetValueOrDefault(d.DescriptionSymbol, "");
+                }
+                if (IconField().Match(F("icon")) is { Success: true } iconField) iconEntries.TryAdd(constant, (iconField.Groups[1].Value, iconField.Groups[2].Value));
                 d.TilesSymbol = F("tiles");
                 if (gfx.TryGetValue(d.TilesSymbol, out var t)) d.Tiles.AddRange(t);
             }
@@ -160,9 +182,10 @@ public static partial class Decorations
                 {
                     d.IconSymbol = icon.Pic;
                     d.IconPaletteSymbol = icon.Pal;
-                    if (incbins.TryGetValue(icon.Pic, out var path)) d.IconPng = Regex.Replace(path, @"\.4bpp(\.\w+)?$", ".png");
+                    if (iconFiles.TryGetValue(icon.Pic, out var inc) && inc.SourcePath.EndsWith(".png", StringComparison.Ordinal)) d.IconPng = inc.SourcePath;
                 }
             }
+            else if (!iconTable) d.HasIconEntry = true; // no gDecorIconTable: a missing .icon is {NULL, NULL}
             else
                 data.Problems.Add($"{constant} has no entry in gDecorIconTable ({IconTableFile}) – the game reads past the end of the table for its menu icon. " +
                                   "\"Add missing icon entries\" fixes it.");
@@ -274,6 +297,28 @@ public static partial class Decorations
         int replaceFrom = firstOnOwnLine ? lineStartOfFirst : literalsStart;
         int replaceTo = block.Index + block.Length;
         return descriptions[..replaceFrom] + FormatLiterals(text, firstOnOwnLine ? first : "", next, nl) + descriptions[replaceTo..];
+    }
+
+    /// <summary>
+    /// Sets ".description = COMPOUND_STRING(…)" of one decoration in the header (expansion 1.16+), in the layout of the
+    /// existing value. Unchanged text → unchanged file.
+    /// </summary>
+    public static string SetInlineDescription(string header, string constant, string text)
+    {
+        text = text.Replace("\r\n", "\n").TrimEnd('\n');
+        var entry = EntryStart().Matches(header).FirstOrDefault(m => m.Groups[1].Value == constant)
+                    ?? throw new InvalidOperationException($"{constant} was not found in {HeaderFile}.");
+        int open = entry.Index + entry.Length - 1;
+        int close = TrainerFile.Match(header, open);
+        var f = TrainerFile.Fields(header, open, close).FirstOrDefault(x => x.Name == "description")
+                ?? throw new InvalidOperationException($".description of {constant} was not found.");
+        if (CString.TryRead(f.Raw) is not { } current) throw new InvalidOperationException($".description of {constant} is not a plain text.");
+        if (Unescape(current) == text) return header;
+        if (CheckDescription(text) is { } problem) throw new InvalidOperationException(problem);
+        int start = f.ValueStart;
+        while (start < f.ValueEnd && char.IsWhiteSpace(header[start])) start++;
+        int end = start + f.Raw.Length;
+        return header[..start] + CString.Format(text.Replace("\n", "\\n"), f.Raw, header, start) + header[end..];
     }
 
     /// <summary>"line1\n" / "line2" as C literals, one per line.</summary>

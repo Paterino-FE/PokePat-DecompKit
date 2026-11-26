@@ -7,3 +7,7 @@ TILESETEDITOR_REFERENCE_PROJECT=C:\path\to\your\pokeemerald-expansion-project
 TILESETEDITOR_EXPANSION_REFERENCE=C:\path\to\pokeemerald-expansion
 # Optional: a writable copy that may be built (tests that run Poryscript; fall back to fixtures):
 TILESETEDITOR_TEST_CHECKOUT=\\wsl.localhost\Ubuntu\home\you\test-checkout
+# Optional: a pret/pokeplatinum checkout, read only (Platinum tests; skipped when missing):
+TILESETEDITOR_PLATINUM_REFERENCE=\\wsl.localhost\Ubuntu\home\you\pokeplatinum
+# Optional: a current pret/pokeplatinum (per-map folders, PNG overworld sprites); read only:
+TILESETEDITOR_PLATINUM_NEW_REFERENCE=\\wsl.localhost\Ubuntu\home\you\pokeplatinum-new

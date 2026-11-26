@@ -146,7 +146,7 @@ public partial class DialogPreviewWindow : Window
             var png = Png.Load(dlg.FileName);
             if (!png.IsIndexed || !((png.Width == 56 && png.Height == 16) || (png.Width == 24 && png.Height == 24)))
             {
-                MessageBox.Show(this, $"Expected an indexed PNG of 56×16 (dialog box) or 24×24 pixels (window frame). This file: {png.Width}×{png.Height}, {(png.IsIndexed ? "indexed" : "not indexed")}.",
+                AppDialog.Show(this, $"Expected an indexed PNG of 56×16 (dialog box) or 24×24 pixels (window frame). This file: {png.Width}×{png.Height}, {(png.IsIndexed ? "indexed" : "not indexed")}.",
                     "Custom window graphic", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -157,7 +157,7 @@ public partial class DialogPreviewWindow : Window
         }
         catch (PngFormatException ex)
         {
-            MessageBox.Show(this, ex.Message, "Custom window graphic", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDialog.Show(this, ex.Message, "Custom window graphic", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 }

@@ -35,7 +35,7 @@ public static class ImageReplaceFlow
         bool newColors = false;
         if (info.Source != PaletteSource.Shared)
         {
-            var choice = MessageBox.Show(Application.Current.MainWindow,
+            var choice = AppDialog.Show(Application.Current.MainWindow,
                 "Which colors should the game use?\n\nYes = the new image's colors (the palette is replaced" +
                 (info.PalRel != null ? $", in {info.PalRel}" : "") + ")\nNo = keep the current palette and map the new image onto it" +
                 (paletteNote != null ? "\n\n" + paletteNote : ""),
@@ -46,7 +46,7 @@ public static class ImageReplaceFlow
         var result = GameGraphics.Convert(current, info, palette, replacement, newColors, allowNearest: false);
         if (result.Errors.Count > 0 && result.Changes.Count > 0 && !newColors)
         {
-            if (MessageBox.Show(Application.Current.MainWindow,
+            if (AppDialog.Show(Application.Current.MainWindow,
                     $"{result.Changes.Count} color(s) are not in the current palette and would be replaced by the closest one:\n\n" +
                     string.Join("\n", result.Changes.Take(12).Select(c => $"  {c.From.ToHex()} → {c.To.ToHex()}")) + "\n\nContinue?",
                     "Confirm color loss", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return false;

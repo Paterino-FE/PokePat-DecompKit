@@ -16,4 +16,8 @@
     <ProjectReference Include="..\TilesetEditor.Export\TilesetEditor.Export.csproj" />
     <ProjectReference Include="..\TilesetEditor.Toolkit\TilesetEditor.Toolkit.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Window and taskbar icon (all sizes 16–256); the same file is the exe's icon. -->
+    <Resource Include="Assets\decompkit.ico" />
+  </ItemGroup>
 </Project>

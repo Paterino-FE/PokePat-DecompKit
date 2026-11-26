@@ -19,7 +19,15 @@ public enum GameDataComposite
     AbilityList,
 }
 
-public enum GameDataSource { CTable, MapSectionsJson }
+public enum GameDataSource
+{
+    CTable,
+    MapSectionsJson,
+    /// <summary>pokeplatinum: one JSON file per entry (res/pokemon/*/data.json, res/items/data/*.json …).</summary>
+    JsonFiles,
+    /// <summary>pokeplatinum: a text bank (res/text/*.json), one message per entry.</summary>
+    TextBank,
+}
 
 /// <summary>A column of a game data table: which field, how it is shown and which values are allowed.</summary>
 public sealed record GameDataColumn(string Header, string Field, GameDataKind Kind)
@@ -41,6 +49,7 @@ public sealed record GameDataColumn(string Header, string Field, GameDataKind Ki
     public long Min { get; init; }
     public long Max { get; init; } = long.MaxValue;
     public string? ConstantPrefix { get; init; }
+    /// <summary>Header(s) listing the allowed constants; several separated by ';'.</summary>
     public string? OptionsFile { get; init; }
     public string? OptionsFilter { get; init; }
     /// <summary>Own regex (group 1 = constant) for <see cref="OptionsFile"/>, instead of the default #define / enum pattern.</summary>
@@ -51,6 +60,10 @@ public sealed record GameDataColumn(string Header, string Field, GameDataKind Ki
     public string? MissingNote { get; init; }
     public double Width { get; init; } = 110;
     public string? Hint { get; init; }
+    /// <summary>pokeplatinum: the value is a JSON boolean (true/false) instead of a string.</summary>
+    public bool JsonBool { get; init; }
+    /// <summary>pokeplatinum: a text bank (project-relative) this column reads from instead of the row's file.</summary>
+    public string? SourceFile { get; init; }
 }
 
 /// <summary>A game data table: source file(s), table variable, key prefix and columns.</summary>
@@ -59,6 +72,8 @@ public sealed record GameDataTableDef(string Id, string Title, string Files, str
     public GameDataSource Source { get; init; } = GameDataSource.CTable;
     public string Note { get; init; } = "";
     public bool CanAdd { get; init; }
+    /// <summary>Headers of the columns whose values group the entries (pocket, type …) for the category filter.</summary>
+    public IReadOnlyList<string> CategoryColumns { get; init; } = [];
 }
 
 public sealed class GameDataCell
@@ -78,6 +93,8 @@ public sealed class GameDataRow
     public int Line { get; init; }
     public required GameDataCell[] Cells { get; init; }
     public string? ReadOnlyReason { get; set; }
+    /// <summary>pokeplatinum text banks: the JSON path of the row's message ("messages[12]."), put before each column's field.</summary>
+    public string PathPrefix { get; init; } = "";
     /// <summary>Field id → raw value as read (null = field missing), the precondition for writing.</summary>
     public Dictionary<string, string?> FieldRaw { get; } = [];
     public bool IsChanged => Cells.Any(c => c.IsChanged);
@@ -93,6 +110,8 @@ public sealed class GameDataTable
     /// <summary>Maximum text length per column (0 = none).</summary>
     public required int[] MaxLength { get; init; }
     public required GameText Text { get; init; }
+    /// <summary>Decides config-dependent values (ternaries, #if blocks); null = such values stay read-only.</summary>
+    public ConfigEvaluator? Config { get; init; }
 
     public IEnumerable<GameDataRow> ChangedRows => Rows.Where(r => r.IsChanged);
 
@@ -141,7 +160,7 @@ public static partial class GameDataCatalog
             new("Name", "#0", GameDataKind.Text) { LengthPattern = ("include/data.h", @"struct\s+TrainerClass\s*\{\s*u8\s+name\[(\d+)\]"), LengthOffset = -1, FallbackLength = 12, Width = 150 },
             new("Prize money", "#1", GameDataKind.Number) { Min = 0, Max = 255, AppendIfMissing = true, MissingNote = "Not set – the game uses 5.", Width = 90,
                 Hint = "Base money; the game multiplies it with the level of the trainer's last Pokémon (and more for double battles)." },
-            new("Poké Ball", "#2", GameDataKind.Constant) { ConstantPrefix = "BALL_", OptionsFile = "include/pokeball.h", OptionsPattern = @"^[ \t]*(BALL_\w+)[ \t]*=[ \t]*\d+[ \t]*,", AppendIfMissing = true, Width = 150,
+            new("Poké Ball", "#2", GameDataKind.Constant) { ConstantPrefix = "BALL_", OptionsFile = "include/pokeball.h;include/constants/pokeball.h", OptionsPattern = @"^[ \t]*(BALL_\w+)[ \t]*=[ \t]*\d+[ \t]*,", AppendIfMissing = true, Width = 150,
                 MissingNote = "Not set – Poké Ball. Only used if B_TRAINER_CLASS_POKE_BALLS >= GEN_7 (include/config/battle.h).",
                 Hint = "Ball of the class's Pokémon; only used if B_TRAINER_CLASS_POKE_BALLS >= GEN_7." },
         ])
@@ -154,8 +173,13 @@ public static partial class GameDataCatalog
             new("Name", "name", GameDataKind.Text) { LengthDefine = "ITEM_NAME_LENGTH", LengthOffset = -1, FallbackLength = 19, Width = 160 },
             new("Price", "price", GameDataKind.Number) { Min = 0, Max = 999999, Width = 80 },
             new("Description", "description", GameDataKind.Text) { LineBreaks = true, SharedStrings = true, Width = 420, Hint = "\\n = new line. The bag shows about 3 short lines." },
+            new("Pocket", "pocket", GameDataKind.Constant) { ConstantPrefix = "POCKET_", OptionsFile = "include/constants/item.h", OptionsFilter = "^POCKET_(?!DUMMY$)", Width = 140,
+                Hint = "Bag pocket the item goes into." },
+            new("Kind", "sortType", GameDataKind.Constant) { ConstantPrefix = "ITEM_TYPE_", OptionsFile = "include/item.h", Width = 190,
+                MissingNote = "Not set (only expansion 1.13+ sorts items by kind).", Hint = "Sort order inside the pocket (expansion 1.13+)." },
         ])
         {
+            CategoryColumns = ["Pocket", "Kind"],
             Note = "Adding items is not supported here: a new item needs a constant (ITEMS_COUNT), icon graphics, pocket and use functions and more. Prices written as expressions (e.g. depending on I_PRICE) are read-only. A description shared by several items is copied for the edited item only.",
         },
         new("moves", "Moves", "src/data/moves_info.h", "gMovesInfo", "MOVE_",
@@ -170,6 +194,7 @@ public static partial class GameDataCatalog
             new("Description", "description", GameDataKind.Text) { LineBreaks = true, SharedStrings = true, Width = 380, Hint = "\\n = new line." },
         ])
         {
+            CategoryColumns = ["Type", "Category"],
             Note = "Adding moves is not supported here: a move needs a constant, a battle effect, an animation script, contest data and learnsets. Values written as expressions (e.g. B_UPDATED_MOVE_DATA >= GEN_6 ? 90 : 95) or inside #if are read-only.",
         },
         new("abilities", "Abilities", "src/data/abilities.h", "gAbilitiesInfo", "ABILITY_",
@@ -197,6 +222,7 @@ public static partial class GameDataCatalog
             new("Hidden ability", "abilities", GameDataKind.Constant) { Part = 2, Composite = GameDataComposite.AbilityList, ConstantPrefix = "ABILITY_", OptionsFile = "include/constants/abilities.h", Width = 165 },
         ])
         {
+            CategoryColumns = ["Type 1", "Type 2"],
             Note = "Adding Pokémon is not supported here: a species needs graphics, cry, learnsets, evolutions, Pokédex data and more. Forms defined by macros, values inside #if (e.g. P_UPDATED_STATS) and family-wide macros (e.g. CLEFAIRY_FAMILY_TYPES) are read-only.",
         },
         new("types", "Types", "src/data/types_info.h", "gTypesInfo", "TYPE_",
@@ -245,9 +271,10 @@ public static partial class GameDataCatalog
         return result;
     }
 
-    public static GameDataTable Load(string root, GameDataTableDef def, GameText? text = null)
+    public static GameDataTable Load(string root, GameDataTableDef def, GameText? text = null, ConfigEvaluator? config = null)
     {
         text ??= GameText.Load(root);
+        config ??= ConfigEvaluator.Load(root);
         var files = ResolveFiles(root, def);
         if (files.Count == 0) throw new FileNotFoundException($"{def.Files} was not found in the project.");
         var rows = new List<GameDataRow>();
@@ -255,19 +282,20 @@ public static partial class GameDataCatalog
         {
             var content = ReadText(root, file);
             if (def.Source == GameDataSource.MapSectionsJson) rows.AddRange(LoadMapSections(def, file, content));
-            else rows.AddRange(LoadCTable(def, file, CTable.Parse(content, def.Marker, def.KeyPrefix)));
+            else rows.AddRange(LoadCTable(def, file, CTable.Parse(content, def.Marker, def.KeyPrefix), config));
         }
         foreach (var g in rows.GroupBy(r => r.Key).Where(g => g.Count() > 1))
             foreach (var r in g) r.ReadOnlyReason ??= "Defined more than once – edit it in the source files.";
         var options = def.Columns.Select((c, i) => c.Kind == GameDataKind.Constant ? (IReadOnlyList<string>?)Options(root, c, rows, i) : null).ToList();
         var maxLength = def.Columns.Select(c => c.Kind == GameDataKind.Text ? MaxLength(root, c) : 0).ToArray();
-        return new GameDataTable { Def = def, Rows = rows, Files = files, Options = options, MaxLength = maxLength, Text = text };
+        return new GameDataTable { Def = def, Rows = rows, Files = files, Options = options, MaxLength = maxLength, Text = text, Config = config };
     }
 
     public static string ReadText(string root, string rel) => new UTF8Encoding(false).GetString(File.ReadAllBytes(ProjectPaths.Combine(root, rel)));
 
-    private static IEnumerable<GameDataRow> LoadCTable(GameDataTableDef def, string file, CTableFile parsed)
+    private static IEnumerable<GameDataRow> LoadCTable(GameDataTableDef def, string file, CTableFile parsed, ConfigEvaluator? config)
     {
+        config = config?.ForFile(parsed.Text);
         foreach (var e in parsed.Entries)
         {
             var row = new GameDataRow { Key = e.Key, File = file, Line = e.Line, Cells = new GameDataCell[def.Columns.Count], ReadOnlyReason = e.ReadOnlyReason };
@@ -276,7 +304,7 @@ public static partial class GameDataCatalog
                 var col = def.Columns[i];
                 var f = e.Field(col.Field);
                 row.FieldRaw[col.Field] = f?.Raw;
-                row.Cells[i] = ReadCell(col, f, e, parsed);
+                row.Cells[i] = ReadCell(col, f, e, parsed, config);
             }
             yield return row;
         }
@@ -284,16 +312,61 @@ public static partial class GameDataCatalog
 
     private static string Collapse(string raw) => Regex.Replace(raw, @"\s+", " ");
 
-    private static GameDataCell ReadCell(GameDataColumn col, CTableField? f, CTableEntry e, CTableFile parsed)
+    private static GameDataCell ReadCell(GameDataColumn col, CTableField? f, CTableEntry e, CTableFile parsed, ConfigEvaluator? config)
     {
         if (f == null)
         {
             bool canAppend = col.AppendIfMissing && e.Positional && e.Fields.Count > 0;
             return new GameDataCell { Original = "", Value = "", Editable = canAppend, Note = col.MissingNote ?? "Not set in this entry (or set by a macro)." };
         }
-        string shown = col.Composite != GameDataComposite.None && SplitComposite(col.Composite, f.Raw) is { } ps ? ps[col.Part] : Collapse(f.Raw);
         if (f.Conditional)
-            return new GameDataCell { Original = shown, Value = shown, Note = "Inside #if – the value depends on the configuration. Edit it in the source file." };
+        {
+            // #if alternatives: show the value of the current configuration; saving replaces the block with a fixed value.
+            var region = config == null ? null : FindConditionalRegion(parsed.Text, e, f, config);
+            if (region == null)
+            {
+                string raw0 = col.Composite != GameDataComposite.None && SplitComposite(col.Composite, f.Raw) is { } p0 ? p0[col.Part] : Collapse(f.Raw);
+                return new GameDataCell { Original = raw0, Value = raw0, Note = "Inside #if in a form the toolkit cannot resolve – edit it in the source file." };
+            }
+            var inner = ReadPlainCell(col, region.ActiveRaw, parsed, config);
+            if (!inner.Editable) return new GameDataCell { Original = inner.Original, Value = inner.Value, Note = inner.Note };
+            return new GameDataCell
+            {
+                Original = inner.Original, Value = inner.Value, Editable = true,
+                Note = $"Depends on the configuration ({region.Depends}); shown: the value for the current settings. " +
+                       "Saving a new value replaces the whole #if block with this fixed value.",
+            };
+        }
+        return ReadPlainCell(col, f.Raw, parsed, config);
+    }
+
+    /// <summary>A cell for a value outside #if (or the active branch of one).</summary>
+    private static GameDataCell ReadPlainCell(GameDataColumn col, string raw, CTableFile parsed, ConfigEvaluator? config)
+    {
+        var f = new CTableField("", 0, 0, 0, raw, false);
+        string shown = col.Composite != GameDataComposite.None && SplitComposite(col.Composite, f.Raw) is { } ps ? ps[col.Part] : Collapse(f.Raw);
+        // "cond ? a : b" with a decidable condition: show and edit the value that applies now.
+        if (col.Kind != GameDataKind.Text && col.Composite == GameDataComposite.None && config?.ResolveTernary(raw) is { } chosen
+            && ReadPlainCell(col, chosen, parsed, null) is { Editable: true } resolved)
+        {
+            var names = string.Join(", ", ConfigEvaluator.Names(raw[..Math.Max(0, raw.IndexOf('?'))]));
+            return new GameDataCell
+            {
+                Original = resolved.Original, Value = resolved.Value, Editable = true,
+                Note = $"Depends on {names} ({Collapse(raw)}); shown: the value for the current settings. Saving a new value replaces the expression with a fixed value.",
+            };
+        }
+        // A number written as an expression or a #define (10000 * TREASURE_FACTOR, PIKACHU_DEFENSE): show the result.
+        if (col.Kind == GameDataKind.Number && !Regex.IsMatch(raw, @"^(\d+|0[xX][0-9A-Fa-f]+)$") && config?.Number(raw) is { } number
+            && number >= col.Min && number <= col.Max)
+        {
+            var value = number.ToString(CultureInfo.InvariantCulture);
+            return new GameDataCell
+            {
+                Original = value, Value = value, Editable = true,
+                Note = $"Written as {Collapse(raw)} = {value}. Saving a new value writes a fixed number for this entry only.",
+            };
+        }
         switch (col.Kind)
         {
             case GameDataKind.Text:
@@ -372,9 +445,11 @@ public static partial class GameDataCatalog
     {
         var result = new List<string>();
         var prefix = col.ConstantPrefix ?? "";
-        if (col.OptionsFile != null && File.Exists(ProjectPaths.Combine(root, col.OptionsFile)))
+        // Several files separated by ';' (constants moved between headers over the versions, e.g. BALL_ → constants/pokeball.h).
+        foreach (var optionsFile in (col.OptionsFile ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            var t = ReadText(root, col.OptionsFile);
+            if (!File.Exists(ProjectPaths.Combine(root, optionsFile))) continue;
+            var t = ReadText(root, optionsFile);
             var rx = col.OptionsPattern != null ? new Regex(col.OptionsPattern, RegexOptions.Multiline) : new Regex(@"^[ \t]*(?:#define[ \t]+(" + Regex.Escape(prefix) + @"\w+)[ \t]+\S|(" + Regex.Escape(prefix) + @"\w+)[ \t]*(?:=[^,\r\n]*)?,)", RegexOptions.Multiline);
             foreach (Match m in rx.Matches(t))
             {
@@ -453,6 +528,14 @@ public static partial class GameDataCatalog
                 if (field?.Raw != expected)
                     throw new GameDataConflictException($"{row.Key}: {id} was changed outside the toolkit since it was loaded. Reload and try again.");
                 var (col, idx) = group.First();
+                ConditionalRegion? region = null;
+                if (field is { Conditional: true })
+                {
+                    region = (table.Config == null ? null : FindConditionalRegion(text, entry, field, table.Config))
+                             ?? throw new GameDataConflictException($"{row.Key}: {col.Header} is inside #if and cannot be changed here.");
+                    edits.Add((region.Start, region.End, region.Indent + "." + id + " = " + NewConditionalRaw(def, row, group.Select(g => g.i), region, text) + "," + region.NewLine));
+                    continue;
+                }
                 if (field == null)
                 {
                     if (!(col.AppendIfMissing && entry.Positional && col.Field.StartsWith('#')))
@@ -460,7 +543,6 @@ public static partial class GameDataCatalog
                     appends[int.Parse(col.Field[1..], CultureInfo.InvariantCulture)] = NewRaw(col, row.Cells[idx].Value, null);
                     continue;
                 }
-                if (field.Conditional) throw new GameDataConflictException($"{row.Key}: {col.Header} is inside #if and cannot be changed here.");
                 if (col.Composite != GameDataComposite.None)
                 {
                     var parts = SplitComposite(col.Composite, field.Raw) ?? throw new GameDataConflictException($"{row.Key}: {id} is not in a simple form.");
@@ -498,6 +580,101 @@ public static partial class GameDataCatalog
         return CTable.ApplyEdits(text, edits);
     }
 
+    /// <summary>The fixed value that replaces an #if block: composite parts, a text in the block's layout, or a number/constant.</summary>
+    private static string NewConditionalRaw(GameDataTableDef def, GameDataRow row, IEnumerable<int> changedColumns, ConditionalRegion region, string fileText)
+    {
+        var cols = changedColumns.ToList();
+        var col = def.Columns[cols[0]];
+        var current = region.ActiveRaw;
+        if (col.Composite != GameDataComposite.None)
+        {
+            var parts = SplitComposite(col.Composite, current) ?? throw new GameDataConflictException($"{row.Key}: {col.Field} is not in a simple form.");
+            for (int i = 0; i < def.Columns.Count; i++)
+                if (def.Columns[i].Field == col.Field && def.Columns[i].Part >= 0) parts[def.Columns[i].Part] = row.Cells[i].Value;
+            return JoinComposite(col.Composite, current, parts);
+        }
+        var value = row.Cells[cols[0]].Value;
+        if (col.Kind != GameDataKind.Text) return value;
+        // A text: one literal per line under the field, like the multi-line texts of the file.
+        var macro = CString.Macro(current) ?? "COMPOUND_STRING";
+        var pieces = CString.Pieces(value).Select(p => "\"" + CString.Encode(p) + "\"").ToList();
+        if (pieces.Count == 1 && !current.Contains('\n')) return $"{macro}({pieces[0]})";
+        string inner = region.Indent + "    ";
+        return macro + "(" + string.Concat(pieces.Select(p => region.NewLine + inner + p)) + ")";
+    }
+
+    /// <summary>
+    /// The lines of an entry that hold a field's #if alternatives: either "#if … .f = a, #else .f = b, #endif" or a value that
+    /// branches inside (".f = COMPOUND_STRING(\"x\" #if … \"a\"), #else \"b\"), #endif"). Start..End covers whole lines
+    /// (End after the #endif line's line break); ActiveRaw is the value the current configuration compiles.
+    /// </summary>
+    public sealed record ConditionalRegion(int Start, int End, string Indent, string NewLine, string ActiveRaw, string Depends);
+
+    [GeneratedRegex(@"^[ \t]*#[ \t]*(if|ifdef|ifndef|elif|else|endif)\b(.*)$")]
+    private static partial Regex DirectiveLine();
+
+    public static ConditionalRegion? FindConditionalRegion(string text, CTableEntry entry, CTableField field, ConfigEvaluator config)
+    {
+        if (field.Name.Length == 0) return null; // positional values: not supported
+        string nl = text.Contains("\r\n") ? "\r\n" : "\n";
+        int fieldLine = text.LastIndexOf('\n', Math.Max(0, field.ValueStart - 1)) + 1;
+        var head = Regex.Match(text[fieldLine..field.ValueStart], @"^([ \t]*)\." + Regex.Escape(field.Name) + @"[ \t]*=[ \t]*$");
+        if (!head.Success) return null;
+        string indent = head.Groups[1].Value;
+
+        // Lines from the field to the entry's end: (start, end incl. line break, text without line break).
+        var lines = new List<(int Start, int End, string Text)>();
+        for (int pos = fieldLine; pos < entry.Close;)
+        {
+            int eol = text.IndexOf('\n', pos);
+            int end = eol < 0 ? text.Length : eol + 1;
+            lines.Add((pos, end, text[pos..end].TrimEnd('\n', '\r')));
+            pos = end;
+        }
+        // Shape A: the field line directly follows an #if line.
+        int start = fieldLine;
+        int prevEnd = fieldLine - 1;
+        int prevStart = prevEnd <= 0 ? 0 : text.LastIndexOf('\n', prevEnd - 1) + 1;
+        var prev = prevEnd > 0 ? text[prevStart..prevEnd].TrimEnd('\r') : "";
+        bool shapeA = DirectiveLine().Match(prev) is { Success: true } pm && pm.Groups[1].Value is "if" or "ifdef" or "ifndef";
+        int depth = 0;
+        bool sawDirective = false;
+        int regionEnd = -1;
+        var conditions = new List<string>();
+        if (shapeA) { start = prevStart; depth = 1; sawDirective = true; conditions.Add(DirectiveLine().Match(prev).Groups[2].Value); }
+        for (int i = 0; i < lines.Count; i++)
+        {
+            var (_, end, line) = lines[i];
+            var d = DirectiveLine().Match(line);
+            if (d.Success)
+            {
+                var kw = d.Groups[1].Value;
+                sawDirective = true;
+                if (kw is "if" or "ifdef" or "ifndef") { depth++; conditions.Add(d.Groups[2].Value); }
+                else if (kw == "elif") conditions.Add(d.Groups[2].Value);
+                else if (kw == "endif" && --depth == 0) { regionEnd = end; break; }
+                else if (kw == "endif" && depth < 0) return null;
+                continue;
+            }
+            var trimmed = line.TrimStart();
+            // Another designated field inside the region: not a block of this field alone.
+            var other = Regex.Match(trimmed, @"^\.(\w+)[ \t]*=(?!=)");
+            if (i > 0 && other.Success && other.Groups[1].Value != field.Name) return null;
+            // Shape B: before the first directive the value must still be open (a line ending in ',' closes it).
+            if (!shapeA && !sawDirective && i > 0 && trimmed.EndsWith(',')) return null;
+            if (!shapeA && !sawDirective && i == 0 && Regex.IsMatch(trimmed, @",\s*(//.*)?$")) return null;
+        }
+        if (regionEnd < 0) return null;
+        var active = config.Preprocess(text[start..regionEnd]);
+        if (active == null) return null;
+        var m = Regex.Matches(active, @"(?:^|\n)[ \t]*\." + Regex.Escape(field.Name) + @"[ \t]*=[ \t]*");
+        if (m.Count != 1) return null; // the field is missing (or twice) in the current configuration
+        var raw = active[(m[0].Index + m[0].Length)..].Trim();
+        if (raw.EndsWith(',')) raw = raw[..^1].TrimEnd();
+        var depends = string.Join(", ", conditions.SelectMany(ConfigEvaluator.Names).Distinct());
+        return new ConditionalRegion(start, regionEnd, indent, nl, raw, depends.Length > 0 ? depends : "#if");
+    }
+
     private static string NewRaw(GameDataColumn col, string value, string? originalRaw, string? fileText = null, int rawStart = 0)
     {
         switch (col.Kind)
@@ -520,7 +697,8 @@ public static partial class GameDataCatalog
 
     private sealed record MapSection(string Id, int ObjectStart, int NameStart, int NameEnd, string? Name, int Line);
 
-    [GeneratedRegex(@"""id""\s*:\s*""(\w+)""")]
+    // "id" since expansion 1.12, "map_section" before.
+    [GeneratedRegex(@"""(?:id|map_section)""\s*:\s*""(\w+)""")]
     private static partial Regex JsonId();
 
     [GeneratedRegex(@"""name""\s*:\s*""((?:[^""\\]|\\.)*)""")]

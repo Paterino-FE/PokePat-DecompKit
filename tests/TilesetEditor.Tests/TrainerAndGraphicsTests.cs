@@ -9,9 +9,27 @@ public class TrainerTests
 {
     private static string TrainersText => File.ReadAllText(Path.Combine(TestPaths.ReferenceProject, "src", "data", "trainers.h"));
 
+    /// <summary>
+    /// The C-syntax tests need a trainers.h that may be edited: a project with the COMPETITIVE_PARTY_SYNTAX option (up to
+    /// expansion 1.12; its trainers.h is in C syntax either way). From 1.13 on trainers.h is only a build product.
+    /// </summary>
+    private static bool HasCSyntaxTrainers
+    {
+        get
+        {
+            var root = TestPaths.ReferenceProject;
+            var h = Path.Combine(root, "src", "data", "trainers.h");
+            if (!File.Exists(h)) return false;
+            var general = Path.Combine(root, "include", "config", "general.h");
+            return !TrainerSource.IsGeneratedFromParty(File.ReadAllText(h))
+                || (File.Exists(general) && File.ReadAllText(general).Contains("COMPETITIVE_PARTY_SYNTAX"));
+        }
+    }
+
     [Fact]
     public void EveryTrainerRoundTripsUnchanged()
     {
+        if (!HasCSyntaxTrainers) return;
         var text = TrainersText;
         var all = TrainerFile.Parse(text);
         Assert.True(all.Count > 800);
@@ -26,6 +44,7 @@ public class TrainerTests
     [Fact]
     public void EditsOnlyTheChangedTrainer()
     {
+        if (!HasCSyntaxTrainers) return;
         var text = TrainersText;
         var all = TrainerFile.Parse(text);
         var p = all.First(t => t.Party.Count >= 2 && t.Party.All(m => m.Fields.Any(f => f.Name == "moves")));
@@ -69,6 +88,7 @@ public class TrainerTests
         Assert.Contains("#define TRAINERS_COUNT    5", TrainerFile.AddConstant(full, "TRAINER_D", slot2));
         Assert.NotNull(TrainerFile.FindFreeId(full.Replace("MAX_TRAINERS_COUNT 6", "MAX_TRAINERS_COUNT 4"), []).Problem);
 
+        if (!HasCSyntaxTrainers) return;
         var text = TrainersText;
         var all = TrainerFile.Parse(text);
         var d = new TrainerData { Id = "TRAINER_TK_TEST", Name = "GUARD", TrainerClass = "TRAINER_CLASS_HIKER", Pic = "TRAINER_PIC_HIKER", AiFlags = "AI_FLAG_BASIC_TRAINER" };
@@ -78,6 +98,37 @@ public class TrainerTests
         Assert.Equal(all.Count + 1, parsed.Count);
         var back = TrainerFile.ToData(parsed.Single(t => t.Id == "TRAINER_TK_TEST"));
         Assert.Equal(("GUARD", "SPECIES_ZIGZAGOON", 5), (back.Name, back.Party.Single().Species, back.Party.Single().Level));
+    }
+
+    [Fact]
+    public void NewTrainerSlotWithCountsBehindAConfigSwitch()
+    {
+        // expansion 1.13+: the counts are aliases chosen by "#if IS_FRLG"; the Emerald numbers are the ones that apply.
+        var opp = "#define TRAINER_NONE 0\n#define TRAINER_A    1\n#define TRAINER_B    2\n\n#define TRAINERS_COUNT_EMERALD     3\n#define MAX_TRAINERS_COUNT_EMERALD 5\n\n" +
+                  "#if IS_FRLG\n#define TRAINERS_COUNT      TRAINERS_COUNT_FRLG\n#define MAX_TRAINERS_COUNT  MAX_TRAINERS_COUNT_FRLG\n#else\n" +
+                  "#define TRAINERS_COUNT      TRAINERS_COUNT_EMERALD\n#define MAX_TRAINERS_COUNT  MAX_TRAINERS_COUNT_EMERALD\n#endif\n";
+        var slot = TrainerFile.FindFreeId(opp, []);
+        Assert.Equal((3, true, (string?)null), (slot.Id, slot.RaisesCount, slot.Problem));
+        var added = TrainerFile.AddConstant(opp, "TRAINER_C", slot);
+        Assert.Contains("#define TRAINER_B    2\n#define TRAINER_C    3\n", added);
+        Assert.Contains("#define TRAINERS_COUNT_EMERALD     4\n", added);
+        Assert.Contains("#define TRAINERS_COUNT      TRAINERS_COUNT_EMERALD\n", added);
+        var full = TrainerFile.FindFreeId(opp.Replace("MAX_TRAINERS_COUNT_EMERALD 5", "MAX_TRAINERS_COUNT_EMERALD 3"), []);
+        Assert.NotNull(full.Problem);
+        // "More trainer slots": the number behind the alias grows by a multiple of 8, nothing else changes.
+        var (raised, oldMax, newMax) = TrainerFile.RaiseMaxTrainers(opp, 60);
+        Assert.Equal((5, 69), (oldMax, newMax));
+        Assert.Equal(opp.Replace("MAX_TRAINERS_COUNT_EMERALD 5", "MAX_TRAINERS_COUNT_EMERALD 69"), raised);
+        Assert.Equal(69, TrainerFile.MaxTrainers(raised));
+    }
+
+    [Fact]
+    public void FindsAFreeTrainerSlotInTheReferenceProject()
+    {
+        var opp = File.ReadAllText(Path.Combine(TestPaths.ReferenceProject, "include", "constants", "opponents.h"));
+        var slot = TrainerFile.FindFreeId(opp, []);
+        Assert.Null(slot.Problem);
+        Assert.True(slot.Id > 800);
     }
 
     [Fact]

@@ -24,7 +24,7 @@ public sealed record DecorationPlanResult(ExportPlan Plan, string Constant, int 
 /// <summary>
 /// Plans a new sprite decoration: constant + NUM_DECORATIONS, gDecorations entry, description, DecorGfx (= the OBJ_EVENT_GFX id,
 /// which InitSecretBaseDecorationSprites writes into VAR_OBJ_GFX_ID_x), gDecorIconTable entry and optionally an icon
-/// (PNG + INCBIN + extern) and a new overworld sprite.
+/// (PNG + INCBIN + extern) and a new overworld sprite. expansion 1.16+: description and icon go into the gDecorations entry.
 /// </summary>
 public static partial class DecorationPlanner
 {
@@ -54,8 +54,9 @@ public static partial class DecorationPlanner
         int id = data.MaxId + 1;
         if (id > Decorations.MaxId) errors.Add($"The new id would be {id}; decoration ids are stored as u8 (max. {Decorations.MaxId}).");
         string Read(string rel) => File.ReadAllText(ProjectPaths.Combine(root, rel));
+        bool consolidated = data.Consolidated;
         foreach (var (rel, sym) in new[] { (Decorations.DescriptionFile, desc), (Decorations.TilesFile, gfxSym), (Decorations.ConstantsFile, constant) })
-            if (Regex.IsMatch(Read(rel), @"\b" + sym + @"\b")) errors.Add($"{sym} is already taken in {rel}.");
+            if ((!consolidated || rel != Decorations.DescriptionFile) && Regex.IsMatch(Read(rel), @"\b" + sym + @"\b")) errors.Add($"{sym} is already taken in {rel}.");
         if (req.NewSprite == null && (req.GfxConstant == null || sprites.All(s => s.GfxId != req.GfxConstant)))
             errors.Add($"Overworld sprite {req.GfxConstant ?? "(none)"} was not found.");
         string? iconRel = req.IconPngPath != null ? $"{Decorations.IconDir}/{name.ToLowerInvariant()}.png" : null;
@@ -88,61 +89,81 @@ public static partial class DecorationPlanner
         // 2. Header entry (fields in the order of the existing entries)
         string header = Read(Decorations.HeaderFile);
         string nl = header.Contains("\r\n") ? "\r\n" : "\n";
-        var entry = string.Join(nl,
+        string pic = "NULL", pal = "NULL";
+        if (req.IconPngPath != null)
+        {
+            pic = $"gDecorIcon_{pascal}";
+            pal = $"gDecorIconPalette_{pascal}";
+        }
+        var lines = new List<string>
+        {
             "    [" + constant + "] =",
             "    {",
             $"        .id = {constant},",
             $"        .name = _(\"{req.DisplayName}\"),",
             "        .permission = DECORPERM_SPRITE,",
-            $"        .shape = {req.Shape},",
-            $"        .category = {req.Category},",
-            $"        .price = {req.Price},",
-            $"        .description = {desc},",
-            $"        .tiles = {gfxSym},",
-            "    },");
-        files.Add(Modify(Decorations.HeaderFile, Decorations.AppendToArray(header, "gDecorations", entry, true),
+        };
+        lines.Add($"        .shape = {req.Shape},");
+        lines.Add($"        .category = {req.Category},");
+        lines.Add($"        .price = {req.Price},");
+        if (consolidated)
+            lines.Add("        .description = COMPOUND_STRING(" + nl + Decorations.FormatLiterals(req.Description, "            ", "            ", nl) + "),");
+        else
+            lines.Add($"        .description = {desc},");
+        lines.Add($"        .tiles = {gfxSym},");
+        if (consolidated) lines.Add($"        .icon = {{{pic}, {pal}}},");
+        lines.Add("    },");
+        files.Add(Modify(Decorations.HeaderFile, Decorations.AppendToArray(header, "gDecorations", string.Join(nl, lines), true),
             $"gDecorations[{constant}]: \"{req.DisplayName}\", {req.Category.Replace("DECORCAT_", "")}, {req.Shape.Replace("DECORSHAPE_", "")}, price {req.Price}"));
 
-        // 3. Description
-        string descText = Read(Decorations.DescriptionFile);
-        string dnl = descText.Contains("\r\n") ? "\r\n" : "\n";
-        var descBlock = $"const u8 {desc}[] = _({dnl}" + Decorations.FormatLiterals(req.Description, "    ", "        ", dnl) + ");" + dnl;
-        files.Add(Modify(Decorations.DescriptionFile, AppendBlock(descText, descBlock), $"{desc}"));
+        // 3. Description (own file up to expansion 1.15)
+        if (!consolidated)
+        {
+            string descText = Read(Decorations.DescriptionFile);
+            string dnl = descText.Contains("\r\n") ? "\r\n" : "\n";
+            var descBlock = $"const u8 {desc}[] = _({dnl}" + Decorations.FormatLiterals(req.Description, "    ", "        ", dnl) + ");" + dnl;
+            files.Add(Modify(Decorations.DescriptionFile, AppendBlock(descText, descBlock), $"{desc}"));
+        }
 
         // 4. Graphics: the object event graphics id
         string tiles = Read(Decorations.TilesFile);
         string tnl = tiles.Contains("\r\n") ? "\r\n" : "\n";
         files.Add(Modify(Decorations.TilesFile, AppendBlock(tiles, $"const u16 {gfxSym}[] = {{{tnl}    {gfx}{tnl}}};{tnl}"), $"{gfxSym} = {{{gfx}}}"));
 
-        // 5. Icon table (+ optional icon)
-        string icons = Read(Decorations.IconTableFile);
-        string pic = "NULL", pal = "NULL";
+        // 5. Optional icon (+ icon table up to expansion 1.15)
         if (req.IconPngPath != null)
         {
-            pic = $"gDecorIcon_{pascal}";
-            pal = $"gDecorIconPalette_{pascal}";
             var (pngBytes, iconNote) = ConvertIcon(req.IconPngPath);
             files.Add(new PlannedFile(iconRel!, PlannedAction.Create, pngBytes, "Menu icon 24×24 (" + iconNote + ")"));
             string gfxText = Read(Decorations.IconGraphicsFile);
             string gnl = gfxText.Contains("\r\n") ? "\r\n" : "\n";
+            bool incGfx = GraphicsIncludes.UsesIncGfx(gfxText);
             var (picExt, palExt) = IconExtensions(gfxText);
             string baseRel = iconRel![..^4];
-            string incbins = $"const u32 {pic}[] = INCBIN_U32(\"{baseRel}{picExt}\");{gnl}const u32 {pal}[] = INCBIN_U32(\"{baseRel}{palExt}\");{gnl}";
-            files.Add(Modify(Decorations.IconGraphicsFile, AppendBlock(gfxText, incbins), $"INCBIN {pic}, {pal}"));
+            // expansion 1.13+: INCGFX with the palette taken from the PNG itself; the palette symbol is u16 there.
+            string palType = incGfx ? "u16" : "u32";
+            string decls = incGfx
+                ? $"const u32 {pic}[] = {GraphicsInclude.Format(true, 32, iconRel, picExt)};{gnl}const u16 {pal}[] = {GraphicsInclude.Format(true, 16, iconRel, ".gbapal")};{gnl}"
+                : $"const u32 {pic}[] = INCBIN_U32(\"{baseRel}{picExt}\");{gnl}const u32 {pal}[] = INCBIN_U32(\"{baseRel}{palExt}\");{gnl}";
+            files.Add(Modify(Decorations.IconGraphicsFile, AppendBlock(gfxText, decls), $"{(incGfx ? "INCGFX" : "INCBIN")} {pic}, {pal}"));
             string graphicsH = Read(Decorations.GraphicsHeaderFile);
-            graphicsH = SpriteImportPlanner.InsertAfterLastTopLevel(graphicsH, @"^extern const u32 gDecorIconPalette_\w+\[\];",
-                $"extern const u32 {pic}[];\nextern const u32 {pal}[];\n");
+            graphicsH = SpriteImportPlanner.InsertAfterLastTopLevel(graphicsH, @"^extern const u(?:16|32) gDecorIconPalette_\w+\[\];",
+                $"extern const u32 {pic}[];\nextern const {palType} {pal}[];\n");
             if (Read(Decorations.GraphicsHeaderFile).Contains("\r\n")) graphicsH = Regex.Replace(graphicsH, "(?<!\r)\n", "\r\n");
             files.Add(Modify(Decorations.GraphicsHeaderFile, graphicsH, $"extern {pic}, {pal}"));
-            notes.Add("The icon is converted by the Makefile's generic rules (.png → .4bpp/.gbapal → .lz).");
+            notes.Add("The icon is converted by the Makefile's generic rules (.png → .4bpp/.gbapal → compressed).");
         }
         else notes.Add("Without an own icon the decoration menu shows the overworld sprite (like the small dolls and cushions).");
-        // Decorations without an entry before the new one get {NULL, NULL} implicitly; add them explicitly for clarity.
-        icons = Decorations.AddMissingIconEntries(icons, data.Items.Where(d => !d.HasIconEntry));
-        icons = Decorations.AppendToArray(icons, "gDecorIconTable", Decorations.IconEntryLine(icons, constant, pic, pal), false);
-        var missing = data.Items.Where(d => !d.HasIconEntry).Select(d => d.Constant).ToList();
-        files.Add(Modify(Decorations.IconTableFile, icons, $"gDecorIconTable[{constant}] = {{{pic}, {pal}}}" +
-            (missing.Count > 0 ? $"; missing entries added: {string.Join(", ", missing)}" : "")));
+        if (!consolidated)
+        {
+            string icons = Read(Decorations.IconTableFile);
+            // Decorations without an entry before the new one get {NULL, NULL} implicitly; add them explicitly for clarity.
+            icons = Decorations.AddMissingIconEntries(icons, data.Items.Where(d => !d.HasIconEntry));
+            icons = Decorations.AppendToArray(icons, "gDecorIconTable", Decorations.IconEntryLine(icons, constant, pic, pal), false);
+            var missing = data.Items.Where(d => !d.HasIconEntry).Select(d => d.Constant).ToList();
+            files.Add(Modify(Decorations.IconTableFile, icons, $"gDecorIconTable[{constant}] = {{{pic}, {pal}}}" +
+                (missing.Count > 0 ? $"; missing entries added: {string.Join(", ", missing)}" : "")));
+        }
 
         var plan = ExportPlan.ForFiles(root, $"New decoration {constant}", "src/data/decoration", files);
         plan.Notes.Add($"{constant} gets id {id}. When it is placed in a secret base, the game shows {gfx} as an object (one of the OBJ_EVENT_GFX_VAR_ persons of the base map).");
@@ -176,9 +197,10 @@ public static partial class DecorationPlanner
 
     private static (string Pic, string Pal) IconExtensions(string gfxText)
     {
-        var pic = Regex.Matches(gfxText, @"gDecorIcon_\w+\[\]\s*=\s*INCBIN_U32\(""[^""]+?(\.4bpp[^""]*)""\)").LastOrDefault();
-        var pal = Regex.Matches(gfxText, @"gDecorIconPalette_\w+\[\]\s*=\s*INCBIN_U32\(""[^""]+?(\.gbapal[^""]*)""\)").LastOrDefault();
-        return (pic?.Groups[1].Value ?? ".4bpp.lz", pal?.Groups[1].Value ?? ".gbapal.lz");
+        var decls = GraphicsIncludes.Declarations(gfxText).ToList();
+        var pic = decls.LastOrDefault(d => d.Symbol.StartsWith("gDecorIcon_", StringComparison.Ordinal))?.Include.OutputExtension;
+        var pal = decls.LastOrDefault(d => d.Symbol.StartsWith("gDecorIconPalette_", StringComparison.Ordinal))?.Include.OutputExtension;
+        return (string.IsNullOrEmpty(pic) ? ".4bpp.lz" : pic, string.IsNullOrEmpty(pal) ? ".gbapal.lz" : pal);
     }
 
     /// <summary>Checks a 24×24 icon and converts it to a 4-bit indexed PNG (index 0 = transparent, max. 15 colors).</summary>

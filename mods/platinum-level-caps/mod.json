@@ -1,0 +1,155 @@
+{
+  "id": "platinum-level-caps",
+  "name": "Level caps by badges",
+  "version": "1.0.0",
+  "author": "PokePat",
+  "game": "platinum",
+  "category": "Battle",
+  "description": "Pokémon cannot level past a cap with battle Exp.: the cap is the level of the next Gym Leader, then the League, and after the Champion there is no cap. A Pokémon at the cap stops one Exp. point before the next level; Pokémon already above it keep their Exp. and gain none. The caps can be changed in PokePat after installing.",
+  "files": [
+    {
+      "from": "files/src/level_caps.c",
+      "to": "src/level_caps.c"
+    },
+    {
+      "from": "files/include/level_caps.h",
+      "to": "include/level_caps.h"
+    }
+  ],
+  "edits": [
+    {
+      "file": "src/meson.build",
+      "type": "insert_before",
+      "anchor": "    'debug.c'\n",
+      "text": "    'level_caps.c',\n",
+      "alt": [
+        {
+          "file": "platinum.us/main.lsf.in",
+          "type": "insert_after",
+          "anchor": "\tObject src/debug.c\n",
+          "text": "\tObject src/level_caps.c\n"
+        }
+      ]
+    },
+    {
+      "file": "include/field_battle_data_transfer.h",
+      "type": "insert_after",
+      "anchor": "    int fieldWeather;\n",
+      "text": "    u8 levelCap; // PokePat mod platinum-level-caps (0 = none)\n"
+    },
+    {
+      "file": "src/field_battle_data_transfer.c",
+      "type": "insert_after",
+      "anchor": "#include \"vars_flags.h\"\n",
+      "text": "#include \"level_caps.h\"\n"
+    },
+    {
+      "file": "src/field_battle_data_transfer.c",
+      "type": "insert_after",
+      "anchor": "    TrainerInfo *trainerInfo = SaveData_GetTrainerInfo(saveData);\n",
+      "text": "    dto->levelCap = LevelCaps_Get(trainerInfo->badgeMask, SystemFlag_CheckGameCompleted(SaveData_GetVarsFlags(saveData))); // PokePat mod platinum-level-caps\n"
+    },
+    {
+      "file": "include/struct_defs/battle_system.h",
+      "type": "insert_after",
+      "anchor": "    GameRecords *records;\n",
+      "text": "    u8 levelCap; // PokePat mod platinum-level-caps\n"
+    },
+    {
+      "file": "src/battle/battle_main.c",
+      "type": "insert_before",
+      "anchor": "    battleSys->mapEvolutionMethod = dto->mapEvolutionMethod;\n",
+      "text": "    battleSys->levelCap = dto->levelCap; // PokePat mod platinum-level-caps\n"
+    },
+    {
+      "file": "src/battle/battle_script.c",
+      "type": "insert_after",
+      "anchor": "            newExp += totalExp;\n",
+      "text": "\n            // PokePat mod platinum-level-caps: battle Exp. stops one point before the level after the cap.\n            if (data->battleSys->levelCap != 0 && data->battleSys->levelCap < MAX_POKEMON_LEVEL) {\n                u32 oldExp = newExp - totalExp;\n                u32 capExp = Pokemon_GetSpeciesBaseExpAt(Pokemon_GetValue(mon, MON_DATA_SPECIES, NULL), data->battleSys->levelCap + 1) - 1;\n\n                if (capExp < oldExp) {\n                    capExp = oldExp;\n                }\n\n                if (newExp > capExp) {\n                    newExp = capExp;\n                    totalExp = newExp - oldExp;\n                }\n            }\n"
+    }
+  ],
+  "settings": [
+    {
+      "label": "Before Roark (Coal Badge)",
+      "file": "src/level_caps.c",
+      "before": "{ BADGE_ID_COAL,",
+      "after": " }",
+      "min": 1,
+      "max": 100,
+      "hint": "cap until this badge is won"
+    },
+    {
+      "label": "Before Gardenia (Forest Badge)",
+      "file": "src/level_caps.c",
+      "before": "{ BADGE_ID_FOREST,",
+      "after": " }",
+      "min": 1,
+      "max": 100,
+      "hint": "cap until this badge is won"
+    },
+    {
+      "label": "Before Fantina (Relic Badge)",
+      "file": "src/level_caps.c",
+      "before": "{ BADGE_ID_RELIC,",
+      "after": " }",
+      "min": 1,
+      "max": 100,
+      "hint": "cap until this badge is won"
+    },
+    {
+      "label": "Before Maylene (Cobble Badge)",
+      "file": "src/level_caps.c",
+      "before": "{ BADGE_ID_COBBLE,",
+      "after": " }",
+      "min": 1,
+      "max": 100,
+      "hint": "cap until this badge is won"
+    },
+    {
+      "label": "Before Crasher Wake (Fen Badge)",
+      "file": "src/level_caps.c",
+      "before": "{ BADGE_ID_FEN,",
+      "after": " }",
+      "min": 1,
+      "max": 100,
+      "hint": "cap until this badge is won"
+    },
+    {
+      "label": "Before Byron (Mine Badge)",
+      "file": "src/level_caps.c",
+      "before": "{ BADGE_ID_MINE,",
+      "after": " }",
+      "min": 1,
+      "max": 100,
+      "hint": "cap until this badge is won"
+    },
+    {
+      "label": "Before Candice (Icicle Badge)",
+      "file": "src/level_caps.c",
+      "before": "{ BADGE_ID_ICICLE,",
+      "after": " }",
+      "min": 1,
+      "max": 100,
+      "hint": "cap until this badge is won"
+    },
+    {
+      "label": "Before Volkner (Beacon Badge)",
+      "file": "src/level_caps.c",
+      "before": "{ BADGE_ID_BEACON,",
+      "after": " }",
+      "min": 1,
+      "max": 100,
+      "hint": "cap until this badge is won"
+    },
+    {
+      "label": "All badges, before the Champion",
+      "file": "src/level_caps.c",
+      "before": "#define LEVEL_CAP_LEAGUE ",
+      "after": "\n",
+      "min": 1,
+      "max": 100,
+      "hint": "after the Champion: no cap"
+    }
+  ],
+  "usage": "Change the caps under \"Settings\" below after installing. Rare Candies and the Day Care are not limited by this mod."
+}

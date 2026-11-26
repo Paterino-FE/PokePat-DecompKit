@@ -26,13 +26,19 @@ public sealed class ProjectToolSettings
     public string BuildCommand { get; set; } = DefaultBuildCommand;
     /// <summary>ROM path relative to the project root; null = derived from FILE_NAME in the Makefile.</summary>
     public string? RomPath { get; set; }
+    /// <summary>Game of the project as detected when it was last opened ("Emerald", "Platinum"); null = not opened yet.</summary>
+    public string? Game { get; set; }
 
     public const string DefaultBuildCommand = "make -j$(nproc)";
+    /// <summary>pokeplatinum: build the ROM without the checksum test of "make" (which only passes for the unchanged game).</summary>
+    public const string PlatinumBuildCommand = "make release";
 }
 
 public sealed class ToolkitSettings
 {
     public string? LastProject { get; set; }
+    /// <summary>The game chosen in "Get started" for a new project ("Emerald" or "Platinum").</summary>
+    public string? PreferredGame { get; set; }
     /// <summary>Set once the first-run setup (project folder + optional tools) was completed.</summary>
     public bool SetupCompleted { get; set; }
     public List<string> RecentProjects { get; set; } = [];
@@ -41,6 +47,15 @@ public sealed class ToolkitSettings
     /// <summary>Tool paths that apply to every project unless overridden (Porymap, emulator).</summary>
     public string? DefaultPorymapExe { get; set; }
     public string? DefaultEmulatorExe { get; set; }
+    /// <summary>Nintendo DS emulator (melonDS, DeSmuME) for Platinum projects.</summary>
+    public string? DefaultNdsEmulatorExe { get; set; }
+    /// <summary>"System" (follow Windows), "Light" or "Dark".</summary>
+    public string Theme { get; set; } = "System";
+    /// <summary>Where "Get started" put the downloaded programs (Porymap, mGBA) and the project.</summary>
+    public string? ToolsFolder { get; set; }
+    /// <summary>Look for new versions of the programs, the project's expansion and PokéPat when PokéPat starts (at most once a day).</summary>
+    public bool CheckUpdatesOnStart { get; set; } = true;
+    public DateTime? LastUpdateCheckUtc { get; set; }
 
     public ProjectToolSettings ForProject(string root)
     {

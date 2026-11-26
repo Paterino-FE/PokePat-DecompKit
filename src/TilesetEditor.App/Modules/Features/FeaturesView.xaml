@@ -28,7 +28,8 @@
             <TextBlock DockPanel.Dock="Top" Text="Categories" Style="{StaticResource SectionTitle}"/>
             <ListBox ItemsSource="{Binding Categories}" SelectedItem="{Binding Category}" AutomationProperties.Name="Feature categories"/>
         </DockPanel>
-        <DataGrid ItemsSource="{Binding Source={StaticResource Grouped}}" VirtualizingPanel.IsVirtualizingWhenGrouping="True" SelectedItem="{Binding Selected}" AutoGenerateColumns="False" CanUserAddRows="False"
+        <DataGrid x:Name="OptionsGrid" ItemsSource="{Binding Source={StaticResource Grouped}}" VirtualizingPanel.IsVirtualizingWhenGrouping="True"
+                  HorizontalScrollBarVisibility="Auto" SelectedItem="{Binding Selected}" AutoGenerateColumns="False" CanUserAddRows="False"
                   HeadersVisibility="Column" GridLinesVisibility="Horizontal" SelectionMode="Single" EnableRowVirtualization="True">
             <DataGrid.GroupStyle>
                 <GroupStyle>
@@ -37,9 +38,9 @@
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="GroupItem">
-                                        <Expander IsExpanded="True" Margin="0,2,0,0">
+                                        <Expander IsExpanded="True" Margin="0,2,0,0" Foreground="{DynamicResource InkBrush}">
                                             <Expander.Header>
-                                                <TextBlock FontWeight="SemiBold"><Run Text="{Binding Name, Mode=OneWay}"/><Run Text="  ·  " Foreground="#B3A3A0"/><Run Text="{Binding ItemCount, Mode=OneWay}" Foreground="#7D6B69"/></TextBlock>
+                                                <TextBlock FontWeight="SemiBold" Foreground="{DynamicResource AccentDarkBrush}"><Run Text="{Binding Name, Mode=OneWay}"/><Run Text="  ·  " Foreground="{DynamicResource MutedBrush}"/><Run Text="{Binding ItemCount, Mode=OneWay}" Foreground="{DynamicResource MutedBrush}"/></TextBlock>
                                             </Expander.Header>
                                             <ItemsPresenter/>
                                         </Expander>
@@ -53,13 +54,13 @@
             <DataGrid.RowStyle>
                 <Style TargetType="DataGridRow">
                     <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsChanged}" Value="True"><Setter Property="Background" Value="#FEF3C7"/></DataTrigger>
+                        <DataTrigger Binding="{Binding IsChanged}" Value="True"><Setter Property="Background" Value="{DynamicResource ChangedRowBrush}"/></DataTrigger>
                     </Style.Triggers>
                 </Style>
             </DataGrid.RowStyle>
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Name" Binding="{Binding Name, Mode=OneWay}" Width="290" FontFamily="Consolas" IsReadOnly="True"/>
-                <DataGridTemplateColumn Header="Value" Width="190">
+                <DataGridTextColumn Header="Name" Binding="{Binding Name, Mode=OneWay}" Width="290" MinWidth="200" FontFamily="Consolas" IsReadOnly="True"/>
+                <DataGridTemplateColumn Header="Value" Width="190" MinWidth="140">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <Grid>
@@ -69,17 +70,17 @@
                                           Visibility="{Binding IsGeneration, Converter={StaticResource BoolVis}}"/>
                                 <TextBox Text="{Binding Value, UpdateSourceTrigger=LostFocus}" FontFamily="Consolas"
                                          Visibility="{Binding IsNumber, Converter={StaticResource BoolVis}}"/>
-                                <TextBlock Text="{Binding Value}" FontFamily="Consolas" Foreground="#6B5B59"
+                                <TextBlock Text="{Binding Value}" FontFamily="Consolas" Foreground="{DynamicResource MutedBrush}"
                                            Visibility="{Binding IsReadOnly, Converter={StaticResource BoolVis}}"/>
                             </Grid>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTextColumn Header="Kind" Binding="{Binding KindText, Mode=OneWay}" Width="85" IsReadOnly="True"/>
-                <DataGridCheckBoxColumn Header="Conditional" Binding="{Binding Conditional, Mode=OneWay}" Width="80" IsReadOnly="True"/>
-                <DataGridTextColumn Header="Source" Binding="{Binding File, Mode=OneWay}" Width="150" IsReadOnly="True"/>
-                <DataGridTextColumn Header="Line" Binding="{Binding Line, Mode=OneWay}" Width="50" IsReadOnly="True"/>
-                <DataGridTextColumn Header="Description" Binding="{Binding Description, Mode=OneWay}" Width="*" IsReadOnly="True">
+                <DataGridTextColumn Header="Kind" Binding="{Binding KindText, Mode=OneWay}" Width="85" MinWidth="70" IsReadOnly="True"/>
+                <DataGridCheckBoxColumn Header="Conditional" Binding="{Binding Conditional, Mode=OneWay}" Width="90" MinWidth="85" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Source" Binding="{Binding File, Mode=OneWay}" Width="170" MinWidth="120" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Line" Binding="{Binding Line, Mode=OneWay}" Width="50" MinWidth="45" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Description" Binding="{Binding Description, Mode=OneWay}" Width="*" MinWidth="320" IsReadOnly="True">
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/></Style>
                     </DataGridTextColumn.ElementStyle>

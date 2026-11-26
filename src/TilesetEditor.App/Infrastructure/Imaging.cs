@@ -24,6 +24,31 @@ public static class Imaging
         return bmp;
     }
 
+    private static readonly SemaphoreSlim Loads = new(8);
+
+    /// <summary>
+    /// Fills <paramref name="target"/> with a picture made on a background thread (reading and decoding PNGs over the WSL
+    /// share would block the window). With a <paramref name="cache"/>, a picture is made only once.
+    /// </summary>
+    public static void LoadAsync(System.Windows.Controls.Image target, Func<RgbaImage?> produce,
+        System.Collections.Concurrent.ConcurrentDictionary<string, BitmapSource?>? cache = null, string? key = null)
+    {
+        if (cache != null && key != null && cache.TryGetValue(key, out var hit)) { target.Source = hit; return; }
+        var ui = TaskScheduler.FromCurrentSynchronizationContext();
+        Task.Run(async () =>
+        {
+            await Loads.WaitAsync();
+            try { return produce() is { } img ? ToBitmap(img) : null; }
+            catch (Exception ex) when (ex is System.IO.IOException or PngFormatException or System.IO.InvalidDataException or FormatException or UnauthorizedAccessException) { return null; }
+            finally { Loads.Release(); }
+        }).ContinueWith(t =>
+        {
+            var bmp = t.IsCompletedSuccessfully ? t.Result : null;
+            if (cache != null && key != null) cache[key] = bmp;
+            if (bmp != null) target.Source = bmp;
+        }, ui);
+    }
+
     public static Color ToColor(Rgba32 c) => Color.FromArgb(c.A, c.R, c.G, c.B);
 
     public static SolidColorBrush Brush(Rgba32 c)

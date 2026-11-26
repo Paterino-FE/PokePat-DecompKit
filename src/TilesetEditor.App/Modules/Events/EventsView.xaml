@@ -20,7 +20,7 @@
                 <TextBlock Text="{Binding Hint}" Style="{StaticResource Hint}" FontSize="11" Margin="0,4"/>
                 <ItemsControl ItemsSource="{Binding Problems}">
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate><TextBlock Text="{Binding}" Foreground="#B91C1C" TextWrapping="Wrap"/></DataTemplate>
+                        <DataTemplate><TextBlock Text="{Binding}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap"/></DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
                 <TextBlock Text="How it looks in game (each image = one text box or one line further):" FontSize="11" Margin="0,6,0,2"/>
@@ -87,7 +87,7 @@
                                              MinHeight="60" MaxHeight="160" VerticalScrollBarVisibility="Auto" FontSize="13"/>
                                     <ItemsControl ItemsSource="{Binding Problems}">
                                         <ItemsControl.ItemTemplate>
-                                            <DataTemplate><TextBlock Text="{Binding}" Foreground="#B91C1C" TextWrapping="Wrap"/></DataTemplate>
+                                            <DataTemplate><TextBlock Text="{Binding}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap"/></DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
                                     <ItemsControl ItemsSource="{Binding Boxes}">
@@ -126,177 +126,251 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <DockPanel Margin="8">
-        <!-- Top bar -->
-        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                <Button Content="▶ Play preview" Command="{Binding PreviewCommand}" FontWeight="SemiBold"/>
-                <Button Content="Check" Command="{Binding CheckCommand}"/>
-                <Button Content="Save to project…" Command="{Binding SaveCommand}" FontWeight="SemiBold" Margin="0"/>
-            </StackPanel>
-            <StackPanel>
-                <TextBlock Text="{Binding Status}" Style="{StaticResource Hint}"/>
-                <TextBlock Text="{Binding ManagedInfo}" Style="{StaticResource Hint}" FontSize="11"/>
-            </StackPanel>
-        </DockPanel>
-
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="250"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="400"/>
-            </Grid.ColumnDefinitions>
-
-            <!-- Left: map, events, assignment -->
-            <DockPanel Grid.Column="0" Margin="0,0,8,0">
-                <StackPanel DockPanel.Dock="Top">
-                    <TextBlock Text="Map" FontWeight="SemiBold"/>
-                    <TextBox Text="{Binding MapFilter, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,2" ToolTip="Search map (part of the name)"
-                             AutomationProperties.Name="Search map"/>
-                    <ComboBox ItemsSource="{Binding Maps}" SelectedItem="{Binding SelectedMap}" ItemsPanel="{StaticResource Virtual}" Margin="0,0,0,4"
-                              AutomationProperties.Name="Map"/>
-                    <Button Content="Existing scripts on this map…" Command="{Binding ShowMapScriptsCommand}" HorizontalAlignment="Left" Margin="0,0,0,8"
-                            ToolTip="Read-only view of the map&apos;s hand-written scripts, e.g. who walks where in a cutscene"/>
-                    <TextBlock Text="Events on this map (managed by the toolkit)" FontWeight="SemiBold"/>
-                </StackPanel>
-                <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
-                    <TextBlock Text="Triggered by" FontWeight="SemiBold"/>
-                    <ComboBox ItemsSource="{Binding Slots}" SelectedItem="{Binding SelectedSlot}" Margin="0,2,0,4"
-                              ToolTip="Persons, signs or trigger tiles on this map (created in Porymap)">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate><TextBlock Text="{Binding Display}" TextTrimming="CharacterEllipsis" MaxWidth="400"/></DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <StackPanel Orientation="Horizontal">
-                        <Button Content="Assign event here" Command="{Binding AssignCommand}"/>
-                        <Button Content="+ New on map…" Command="{Binding NewPersonCommand}" Margin="0"
-                                ToolTip="Create a new person, sign or trigger tile (depending on the event's trigger) without Porymap"/>
+    <TabControl SelectedIndex="{Binding SelectedTab}" Margin="4,4,4,0">
+        <TabItem Header="My events">
+            <DockPanel Margin="8">
+                <!-- Top bar -->
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <Button Content="▶ Play preview" Command="{Binding PreviewCommand}" FontWeight="SemiBold"/>
+                        <Button Content="Check" Command="{Binding CheckCommand}"/>
+                        <Button Content="Save to project…" Command="{Binding SaveCommand}" FontWeight="SemiBold" Margin="0"/>
                     </StackPanel>
-                    <ItemsControl ItemsSource="{Binding PendingAssignments}" Margin="0,4,0,0" FontSize="11"/>
-                    <TextBlock Style="{StaticResource Hint}" FontSize="11" Margin="0,4,0,0"
-                               Text="You can create persons, signs and trigger tiles here (matching the trigger) or in Porymap."/>
-                </StackPanel>
-                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,4,0,0">
-                    <Button Content="+ New event" Command="{Binding NewEventCommand}"/>
-                    <Button Content="Delete" Command="{Binding DeleteEventCommand}"/>
-                </StackPanel>
-                <ListBox ItemsSource="{Binding Events}" SelectedItem="{Binding SelectedEvent}">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Margin="0,2">
-                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
-                                <TextBlock Text="{Binding Label}" FontSize="10" Foreground="#7D6B69" FontFamily="Consolas"/>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </DockPanel>
-
-            <!-- Center: event header, building blocks, tree, code -->
-            <Grid Grid.Column="1" IsEnabled="{Binding HasEvent}">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="5"/>
-                    <RowDefinition Height="200"/>
-                </Grid.RowDefinitions>
-                <Grid Margin="0,0,0,6">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="140"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
-                    <TextBlock Text="Title:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <TextBox Grid.Column="1" Text="{Binding EventTitle, UpdateSourceTrigger=PropertyChanged}" FontSize="14"/>
-                    <TextBlock Grid.Column="2" Text="Trigger:" VerticalAlignment="Center" Margin="10,0,6,0"/>
-                    <ComboBox Grid.Column="3" ItemsSource="{Binding Triggers}" SelectedItem="{Binding EventTrigger}"/>
-                    <TextBlock Grid.Row="1" Text="Script name:" VerticalAlignment="Center" Margin="0,4,6,0"/>
-                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding EventLabel, UpdateSourceTrigger=LostFocus}" FontFamily="Consolas" Margin="0,4,0,0"
-                             ToolTip="Name of the script in the project (entered on the person/sign in Porymap)"/>
-                </Grid>
-                <DockPanel Grid.Row="1" Margin="0,0,0,4">
-                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,2">
-                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                            <Button Content="↑" Command="{Binding MoveUpCommand}" Margin="0,0,4,0" ToolTip="Move up"/>
-                            <Button Content="↓" Command="{Binding MoveDownCommand}" Margin="0,0,4,0" ToolTip="Move down"/>
-                            <Button Content="Remove" Command="{Binding RemoveStepCommand}" Margin="0"/>
-                        </StackPanel>
-                        <TextBlock Text="Blocks:" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <TextBox Text="{Binding PaletteFilter, UpdateSourceTrigger=PropertyChanged}" Width="180" HorizontalAlignment="Left"
-                                 AutomationProperties.Name="Search blocks" ToolTip="Search blocks (e.g. battle, money, warp)"/>
-                    </DockPanel>
-                    <ScrollViewer MaxHeight="190" VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding Palette}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <DockPanel Margin="0,1">
-                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Category}" Width="130" FontSize="11" Foreground="#6B5B59"
-                                                   VerticalAlignment="Top" Margin="0,5,0,0"/>
-                                        <ItemsControl ItemsSource="{Binding Items}">
-                                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <Button Style="{StaticResource BlockButton}" Content="{Binding Text}" CommandParameter="{Binding Id}"
-                                                            ToolTip="{Binding Help}" Padding="6,2" FontSize="12"/>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </DockPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
+                    <StackPanel>
+                        <TextBlock Text="{Binding Status}" Style="{StaticResource Hint}"/>
+                        <TextBlock Text="{Binding ManagedInfo}" Style="{StaticResource Hint}" FontSize="11"/>
+                    </StackPanel>
                 </DockPanel>
-                <TreeView Grid.Row="2" x:Name="BlockTree" ItemsSource="{Binding Tree}" SelectedItemChanged="OnTreeSelection" FontSize="13">
-                    <TreeView.ItemContainerStyle>
-                        <Style TargetType="TreeViewItem">
-                            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
-                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-                            <Setter Property="Padding" Value="2,3"/>
-                        </Style>
-                    </TreeView.ItemContainerStyle>
-                    <TreeView.ItemTemplate>
-                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="250"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="400"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left: map, events, assignment -->
+                    <DockPanel Grid.Column="0" Margin="0,0,8,0">
+                        <StackPanel DockPanel.Dock="Top">
+                            <TextBlock Text="Map" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding MapFilter, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,2" ToolTip="Search map (part of the name)"
+                                     AutomationProperties.Name="Search map"/>
+                            <ComboBox ItemsSource="{Binding Maps}" SelectedItem="{Binding SelectedMap}" ItemsPanel="{StaticResource Virtual}" Margin="0,0,0,4"
+                                      AutomationProperties.Name="Map"/>
+                            <Button Content="Existing scripts on this map…" Command="{Binding ShowMapScriptsCommand}" HorizontalAlignment="Left" Margin="0,0,0,8"
+                                    ToolTip="Read-only view of the map&apos;s hand-written scripts, e.g. who walks where in a cutscene"/>
+                            <TextBlock Text="Events on this map (managed by the toolkit)" FontWeight="SemiBold"/>
+                        </StackPanel>
+                        <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                            <TextBlock Text="Triggered by" FontWeight="SemiBold"/>
+                            <ComboBox ItemsSource="{Binding Slots}" SelectedItem="{Binding SelectedSlot}" Margin="0,2,0,4"
+                                      ToolTip="Persons, signs or trigger tiles on this map (created in Porymap)">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate><TextBlock Text="{Binding Display}" TextTrimming="CharacterEllipsis" MaxWidth="400"/></DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding Icon}" Width="22"/>
-                                <TextBlock Text="{Binding Header}"/>
+                                <Button Content="Assign event here" Command="{Binding AssignCommand}"/>
+                                <Button Content="+ New on map…" Command="{Binding NewPersonCommand}" Margin="0"
+                                        ToolTip="Create a new person, sign or trigger tile (depending on the event's trigger) without Porymap"/>
                             </StackPanel>
-                        </HierarchicalDataTemplate>
-                    </TreeView.ItemTemplate>
-                </TreeView>
-                <GridSplitter Grid.Row="3" HorizontalAlignment="Stretch" Background="#D0D4DA"/>
-                <TabControl Grid.Row="4" Margin="0,4,0,0">
-                    <TabItem>
-                        <TabItem.Header>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Check  "/>
-                                <TextBlock Text="{Binding ProblemSummary}" Foreground="#5A6270"/>
-                            </StackPanel>
-                        </TabItem.Header>
-                        <ListBox ItemsSource="{Binding Problems}">
+                            <ItemsControl ItemsSource="{Binding PendingAssignments}" Margin="0,4,0,0" FontSize="11"/>
+                            <TextBlock Style="{StaticResource Hint}" FontSize="11" Margin="0,4,0,0"
+                                       Text="You can create persons, signs and trigger tiles here (matching the trigger) or in Porymap."/>
+                        </StackPanel>
+                        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,4,0,0">
+                            <Button Content="+ New event" Command="{Binding NewEventCommand}"/>
+                            <Button Content="Delete" Command="{Binding DeleteEventCommand}"/>
+                        </StackPanel>
+                        <ListBox ItemsSource="{Binding Events}" SelectedItem="{Binding SelectedEvent}">
                             <ListBox.ItemTemplate>
-                                <DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap"/></DataTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,2">
+                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding Label}" FontSize="10" Foreground="{DynamicResource MutedBrush}" FontFamily="Consolas"/>
+                                    </StackPanel>
+                                </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                    </TabItem>
-                    <TabItem Header="Generated code (Poryscript)">
-                        <TextBox Text="{Binding Code, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" FontSize="11"
-                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
-                    </TabItem>
-                </TabControl>
-            </Grid>
+                    </DockPanel>
 
-            <!-- Right: editor for the selected block -->
-            <Border Grid.Column="2" Margin="8,0,0,0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Background="White" Padding="10">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
-                        <TextBlock Text="Edit block" Style="{StaticResource SectionTitle}"/>
-                        <ContentControl Content="{Binding Editor}"/>
-                        <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
-                                   Text="Click a block in the tree on the left. New blocks are inserted after the selected one, or into the selected branch (e.g. &quot;If YES&quot;)."/>
-                    </StackPanel>
-                </ScrollViewer>
-            </Border>
-        </Grid>
-    </DockPanel>
+                    <!-- Center: event header, building blocks, tree, code -->
+                    <Grid Grid.Column="1" IsEnabled="{Binding HasEvent}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="5"/>
+                            <RowDefinition Height="200"/>
+                        </Grid.RowDefinitions>
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="140"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                            <TextBlock Text="Title:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox Grid.Column="1" Text="{Binding EventTitle, UpdateSourceTrigger=PropertyChanged}" FontSize="14"/>
+                            <TextBlock Grid.Column="2" Text="Trigger:" VerticalAlignment="Center" Margin="10,0,6,0"/>
+                            <ComboBox Grid.Column="3" ItemsSource="{Binding Triggers}" SelectedItem="{Binding EventTrigger}"/>
+                            <TextBlock Grid.Row="1" Text="Script name:" VerticalAlignment="Center" Margin="0,4,6,0"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding EventLabel, UpdateSourceTrigger=LostFocus}" FontFamily="Consolas" Margin="0,4,0,0"
+                                     ToolTip="Name of the script in the project (entered on the person/sign in Porymap)"/>
+                        </Grid>
+                        <DockPanel Grid.Row="1" Margin="0,0,0,4">
+                            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,2">
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                    <Button Content="↑" Command="{Binding MoveUpCommand}" Margin="0,0,4,0" ToolTip="Move up"/>
+                                    <Button Content="↓" Command="{Binding MoveDownCommand}" Margin="0,0,4,0" ToolTip="Move down"/>
+                                    <Button Content="Remove" Command="{Binding RemoveStepCommand}" Margin="0"/>
+                                </StackPanel>
+                                <TextBlock Text="Blocks:" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBox Text="{Binding PaletteFilter, UpdateSourceTrigger=PropertyChanged}" Width="180" HorizontalAlignment="Left"
+                                         AutomationProperties.Name="Search blocks" ToolTip="Search blocks (e.g. battle, money, warp)"/>
+                            </DockPanel>
+                            <ScrollViewer MaxHeight="190" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding Palette}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <DockPanel Margin="0,1">
+                                                <TextBlock DockPanel.Dock="Left" Text="{Binding Category}" Width="130" FontSize="11" Foreground="{DynamicResource MutedBrush}"
+                                                           VerticalAlignment="Top" Margin="0,5,0,0"/>
+                                                <ItemsControl ItemsSource="{Binding Items}">
+                                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Button Style="{StaticResource BlockButton}" Content="{Binding Text}" CommandParameter="{Binding Id}"
+                                                                    ToolTip="{Binding Help}" Padding="6,2" FontSize="12"/>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </DockPanel>
+                        <TreeView Grid.Row="2" x:Name="BlockTree" ItemsSource="{Binding Tree}" SelectedItemChanged="OnTreeSelection" FontSize="13">
+                            <TreeView.ItemContainerStyle>
+                                <Style TargetType="TreeViewItem">
+                                    <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+                                    <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                    <Setter Property="Padding" Value="2,3"/>
+                                </Style>
+                            </TreeView.ItemContainerStyle>
+                            <TreeView.ItemTemplate>
+                                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Icon}" Width="22"/>
+                                        <TextBlock Text="{Binding Header}"/>
+                                    </StackPanel>
+                                </HierarchicalDataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
+                        <GridSplitter Grid.Row="3" HorizontalAlignment="Stretch" Background="{DynamicResource BorderBrush}"/>
+                        <TabControl Grid.Row="4" Margin="0,4,0,0">
+                            <TabItem>
+                                <TabItem.Header>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Check  "/>
+                                        <TextBlock Text="{Binding ProblemSummary}" Foreground="{DynamicResource MutedBrush}"/>
+                                    </StackPanel>
+                                </TabItem.Header>
+                                <ListBox ItemsSource="{Binding Problems}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap"/></DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </TabItem>
+                            <TabItem Header="Generated code (Poryscript)">
+                                <TextBox Text="{Binding Code, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" FontSize="11"
+                                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
+                            </TabItem>
+                        </TabControl>
+                    </Grid>
+
+                    <!-- Right: editor for the selected block -->
+                    <Border Grid.Column="2" Margin="8,0,0,0" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Background="{DynamicResource SurfaceBrush}" Padding="10">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Text="Edit block" Style="{StaticResource SectionTitle}"/>
+                                <ContentControl Content="{Binding Editor}"/>
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
+                                           Text="Click a block in the tree on the left. New blocks are inserted after the selected one, or into the selected branch (e.g. &quot;If YES&quot;)."/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+            </DockPanel>
+        </TabItem>
+        <TabItem Header="Existing in the game">
+            <DockPanel Margin="8" DataContext="{Binding Existing}">
+                <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                    <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox Text="{Binding Search, UpdateSourceTrigger=PropertyChanged, Delay=250}" Width="260" Margin="0,0,12,0"
+                             ToolTip="Words of a dialog, a person, a script or a map" AutomationProperties.Name="Search existing dialogs"/>
+                    <TextBlock Text="Map:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <ComboBox ItemsSource="{Binding Maps}" SelectedItem="{Binding Map}" Width="220" Margin="0,0,12,0" IsTextSearchEnabled="True"
+                              ItemsPanel="{StaticResource Virtual}"/>
+                    <TextBlock Text="Show:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <ComboBox ItemsSource="{Binding ModeList}" SelectedItem="{Binding Mode}" Width="190" Margin="0,0,12,0"/>
+                    <Button Content="Use as template for a new event" Command="{Binding UseAsTemplateCommand}" FontWeight="SemiBold"
+                            ToolTip="Creates an event in the same map with these texts as message blocks – change it and assign it to a person or sign."/>
+                    <Button Content="Show the script…" Command="{Binding OpenScriptCommand}"
+                            ToolTip="The whole script of this map, with movements and jumps."/>
+                </WrapPanel>
+                <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" Style="{StaticResource Hint}" Margin="0,0,0,4"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="430"/>
+                        <ColumnDefinition Width="5"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <ListBox ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" ItemsPanel="{StaticResource Virtual}"
+                             VirtualizingPanel.IsVirtualizing="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="Existing events">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="0,2">
+                                    <TextBlock DockPanel.Dock="Left" Text="{Binding Icon}" FontSize="16" Width="26" VerticalAlignment="Top"/>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding Subtitle}" FontSize="11" Foreground="{DynamicResource MutedBrush}" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" Background="{DynamicResource BorderBrush}"/>
+                    <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" Margin="8,0,0,0">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Details}" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11" Margin="0,0,0,8"/>
+                            <ItemsControl ItemsSource="{Binding SelectedDialogs}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,8" Background="{DynamicResource SurfaceBrush}">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Header}" FontFamily="Consolas" FontSize="10" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap"/>
+                                                <TextBox Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" BorderThickness="0" Margin="0,4"
+                                                         Background="Transparent" FontSize="13"/>
+                                                <ItemsControl ItemsSource="{Binding Boxes}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Image Source="{Binding}" Width="360" Height="72" Stretch="Fill" Margin="0,0,6,6"
+                                                                   RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </DockPanel>
+        </TabItem>
+    </TabControl>
 </UserControl>

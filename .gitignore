@@ -25,3 +25,11 @@ docs/OFFEN.md
 
 # Downloaded tools (setup-porytiles.ps1 installs into WSL, nothing belongs here)
 tools/downloads/
+
+# Local builds from dev-build.sh: unpacked test build and release packages
+testbuild/
+release/
+
+# Local work area: pokeemerald-expansion checkout and tools (Porymap, mGBA, Porytiles)
+workspace/
+.devbuild-targets

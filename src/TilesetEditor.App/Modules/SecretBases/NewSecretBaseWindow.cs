@@ -206,7 +206,7 @@ public sealed class NewSecretBaseWindow : Window
     {
         if (_tile is not { } t || _map.SelectedItem is not string folder || CurrentId() is not { } id || !int.TryParse(_elevation.Text.Trim(), out var elev)) return;
         var warning = TileWarning();
-        if (warning != null && MessageBox.Show(this, warning + "\n\nCreate the location anyway?", Title, MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        if (warning != null && AppDialog.Show(this, warning + "\n\nCreate the location anyway?", Title, MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
         Result = new NewSecretBaseResult(folder, t.X, t.Y, elev, id, warning);
         DialogResult = true;
