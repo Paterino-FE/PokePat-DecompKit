@@ -93,7 +93,9 @@ public sealed class GameDataRowVm : ObservableObject
 
     public GameDataRow Row { get; }
     public string Key => Row.Key;
-    public string Source => $"{Path.GetFileName(Row.File)}:{Row.Line}";
+    public string Source => Row.File.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+        ? (Path.GetFileName(Row.File) == "data.json" ? Path.GetFileName(Path.GetDirectoryName(Row.File)) + "/data.json" : Path.GetFileName(Row.File))
+        : $"{Path.GetFileName(Row.File)}:{Row.Line}";
     public IReadOnlyList<GameDataCellVm> Cells { get; }
     public bool IsChanged => Row.IsChanged;
     public bool HasError => Cells.Any(c => c.HasError);
@@ -159,14 +161,21 @@ public sealed class GameDataTableVm(GameDataTableDef def) : ObservableObject
 /// </summary>
 public sealed class GameDataViewModel : ObservableObject, IToolkitModule
 {
+    private readonly DeferredLoad _reload;
     private readonly ProjectContext _ctx;
+    private readonly IGameDataProvider _data;
     private bool _loading;
 
-    public GameDataViewModel(ProjectContext ctx)
+    public GameDataViewModel(ProjectContext ctx) : this(ctx, EmeraldGameData.Instance) { }
+
+    /// <summary>The same module for every game: <paramref name="data"/> decides which tables exist and how they are stored.</summary>
+    public GameDataViewModel(ProjectContext ctx, IGameDataProvider data)
     {
         _ctx = ctx;
-        _ctx.ProjectChanged += (_, _) => { if (!HasUnsavedChanges) _ = LoadAsync(); };
-        foreach (var def in GameDataCatalog.Tables) Tables.Add(new GameDataTableVm(def));
+        _data = data;
+        _reload = new DeferredLoad(() => HasUnsavedChanges ? null : LoadAsync(), prefetch: true);
+        _ctx.ChangedFor(data.Game, _reload.Request);
+        foreach (var def in data.Tables) Tables.Add(new GameDataTableVm(def));
         _selectedTable = Tables[0];
         SaveCommand = new RelayCommand(Save, () => HasUnsavedChanges && !_loading);
         ResetCommand = new RelayCommand(Discard, () => HasUnsavedChanges);
@@ -178,11 +187,12 @@ public sealed class GameDataViewModel : ObservableObject, IToolkitModule
             if (file != null) Process.Start("explorer.exe", $"/select,\"{ProjectPaths.Combine(_ctx.Root, file)}\"");
         }, () => _ctx.Root != null && SelectedTable?.Table != null);
         View = new GameDataView { DataContext = this };
+        _reload.Attach(View);
         _ = LoadAsync();
     }
 
     public string Title => "Game data";
-    public string Description => "Names, prices, stats … in the C tables";
+    public string Description => _data.Game == Core.Project.GameKind.Platinum ? "Pokémon, moves, items, names … (JSON)" : "Names, prices, stats … in the C tables";
     public bool IsAvailable => true;
     public override string ToString() => Title;
     public FrameworkElement View { get; }
@@ -210,6 +220,9 @@ public sealed class GameDataViewModel : ObservableObject, IToolkitModule
         {
             if (!Set(ref _selectedTable, value)) return;
             OnPropertyChanged(nameof(IsTrainerClasses));
+            OnPropertyChanged(nameof(CanAddEntry));
+            OnPropertyChanged(nameof(HasCardView));
+            OnPropertyChanged(nameof(AddButtonText));
             OnPropertyChanged(nameof(TableNote));
             ColumnsChanged?.Invoke(this, EventArgs.Empty);
             BuildQuickFilters();
@@ -252,6 +265,18 @@ public sealed class GameDataViewModel : ObservableObject, IToolkitModule
     }
 
     public bool IsTrainerClasses => SelectedTable?.Def.Id == "trainer_classes";
+
+    private Platinum.PlatinumItemCards? _itemCards;
+    private bool _useCards = true;
+
+    /// <summary>Platinum items can be shown as cards with their icons instead of the table.</summary>
+    public bool HasCardView => SelectedTable?.Def.Id == "pl_items";
+    public bool UseCards { get => _useCards; set { if (Set(ref _useCards, value)) ColumnsChanged?.Invoke(this, EventArgs.Empty); } }
+    public FrameworkElement? CardView => HasCardView && UseCards ? (_itemCards ??= new Platinum.PlatinumItemCards(this, _ctx)).View : null;
+
+    /// <summary>Tables that can get new entries: trainer classes (both games) and items (Platinum).</summary>
+    public bool CanAddEntry => SelectedTable?.Def.Id is "trainer_classes" or "pl_trainer_classes" or "pl_items";
+    public string AddButtonText => SelectedTable?.Def.Id == "pl_items" ? "+ Add item…" : "+ Add trainer class…";
 
     /// <summary>Pockets/kinds of items, types/categories of moves … with their entry counts; "All" first.</summary>
     public ObservableCollection<GameDataCategory> Categories { get; } = [];
@@ -314,7 +339,7 @@ public sealed class GameDataViewModel : ObservableObject, IToolkitModule
         _loading = true;
         try
         {
-            if (root == null)
+            if (root == null || _ctx.Game != _data.Game)
             {
                 foreach (var t in Tables) { t.Table = null; t.Rows = []; t.Error = "No project is open."; t.Refresh(); }
             }
@@ -322,21 +347,28 @@ public sealed class GameDataViewModel : ObservableObject, IToolkitModule
             {
                 var loaded = await Task.Run(() =>
                 {
-                    var text = GameText.Load(root);
-                    return GameDataCatalog.Tables.Select(def =>
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    var text = _data.LoadText(root);
+                    Perf.Log("game data: texts", sw.ElapsedMilliseconds);
+                    // The tables at the same time (each reads its files in parallel, too).
+                    return _data.Tables.AsParallel().AsOrdered().WithDegreeOfParallelism(4).Select(def =>
                     {
                         try
                         {
-                            var table = GameDataCatalog.Load(root, def, text);
-                            return (Table: table, Error: (string?)null, Quick: QuickFilters.For(table, root));
+                            var sw2 = System.Diagnostics.Stopwatch.StartNew();
+                            var table = _data.Load(root, def, text);
+                            Perf.Log($"game data: read {def.Title}", sw2.ElapsedMilliseconds);
+                            var quick = Perf.Time($"game data: filters {def.Title}", () => _data.QuickFilters(table, root));
+                            return (Table: table, Error: (string?)null, Quick: quick);
                         }
-                        catch (Exception ex) when (ex is IOException or FormatException or UnauthorizedAccessException or InvalidOperationException)
+                        catch (Exception ex) when (ex is IOException or FormatException or UnauthorizedAccessException or InvalidOperationException or System.Text.Json.JsonException)
                         {
                             return (Table: (GameDataTable?)null, Error: $"{def.Title} could not be read: {ex.Message}", Quick: new List<QuickFilter>());
                         }
                     }).ToList();
-                });
+                }).ContinueWith(t => t.Exception?.InnerException is { } inner ? throw inner : t.Result, TaskScheduler.Default);
                 if (_ctx.Root != root) return;
+                var swUi = System.Diagnostics.Stopwatch.StartNew();
                 for (int i = 0; i < Tables.Count; i++)
                 {
                     var vm = Tables[i];
@@ -346,17 +378,16 @@ public sealed class GameDataViewModel : ObservableObject, IToolkitModule
                     vm.Rows = vm.Table == null ? [] : vm.Table.Rows.Select(r => new GameDataRowVm(vm.Table, r, RowChanged)).ToList();
                     vm.Refresh();
                 }
+                Perf.Log("game data: row view models", swUi.ElapsedMilliseconds);
             }
         }
         finally
         {
             _loading = false;
         }
-        OnPropertyChanged(nameof(TableNote));
-        ColumnsChanged?.Invoke(this, EventArgs.Empty);
-        BuildQuickFilters();
-        BuildCategories();
-        ApplyFilter();
+        Perf.Time("game data: columns", () => { OnPropertyChanged(nameof(TableNote)); ColumnsChanged?.Invoke(this, EventArgs.Empty); });
+        Perf.Time("game data: filters ui", () => { BuildQuickFilters(); BuildCategories(); });
+        Perf.Time("game data: rows into list", ApplyFilter);
         CommandManager.InvalidateRequerySuggested();
     }
 
@@ -407,7 +438,7 @@ public sealed class GameDataViewModel : ObservableObject, IToolkitModule
         var r = Selected;
         var t = SelectedTable?.Table;
         if (r == null || t == null) { Details = ""; return; }
-        var lines = new List<string> { $"{r.Key} – {r.Row.File}, line {r.Row.Line}" };
+        var lines = new List<string> { r.Row.File.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? $"{r.Key} – {r.Row.File}" : $"{r.Key} – {r.Row.File}, line {r.Row.Line}" };
         if (r.Row.ReadOnlyReason != null) lines.Add("Read-only: " + r.Row.ReadOnlyReason);
         for (int i = 0; i < r.Cells.Count; i++)
         {
@@ -461,33 +492,27 @@ public sealed class GameDataViewModel : ObservableObject, IToolkitModule
         var files = new List<PlannedFile>();
         try
         {
-            foreach (var g in changed.SelectMany(t => GameDataCatalog.ChangedFiles(t).Select(f => (Table: t, File: f))).GroupBy(x => x.File))
+            foreach (var g in changed.SelectMany(t => _data.ChangedFiles(t).Select(f => (Table: t, File: f))).GroupBy(x => x.File))
             {
                 var list = g.ToList();
-                files.Add(ProjectWriter.ModifyText(root, g.Key, text => list.Aggregate(text, (cur, x) => GameDataCatalog.Write(x.Table, g.Key, cur)),
+                files.Add(ProjectWriter.ModifyText(root, g.Key, text => list.Aggregate(text, (cur, x) => _data.Write(x.Table, g.Key, cur)),
                     string.Join(" | ", list.Select(x => Describe(x.Table, g.Key)))));
             }
         }
-        catch (Exception ex) when (ex is GameDataConflictException or IOException or InvalidOperationException or FormatException)
+        catch (Exception ex) when (ex is GameDataConflictException or IOException or InvalidOperationException or FormatException or System.Text.Json.JsonException)
         {
             ProjectWriter.Warn("Save game data", ex.Message);
             return;
         }
-        var notes = new List<string>
-        {
-            "Only the changed values are replaced; every other character of these files stays as it is.",
-            "Build the ROM afterwards to see the changes in-game.",
-            "Names were checked against charmap.txt and the game's length limits. How long texts (descriptions) fit in the menus is not checked – look at them in-game.",
-        };
-        if (changed.Any(t => t.Def.Source == GameDataSource.MapSectionsJson))
-            notes.Add("region_map_sections.json is turned into C code by the build (src/data/region_map/region_map_entries.h is generated).");
-        if (!ProjectWriter.Apply(root, "Game data", "src", files, [.. notes])) return;
+        if (!ProjectWriter.Apply(root, "Game data", _data.SourceFolder, files, [.. _data.SaveNotes(changed)])) return;
         _ = LoadAsync();
         _ctx.Reload();
     }
 
     private void AddTrainerClass()
     {
+        if (SelectedTable?.Def.Id == "pl_items") { AddPlatinumItem(); return; }
+        if (SelectedTable?.Def.Id == "pl_trainer_classes") { AddPlatinumTrainerClass(); return; }
         var root = _ctx.Root;
         var classes = Tables.First(t => t.Def.Id == "trainer_classes");
         if (root == null || classes.Table == null) return;
@@ -559,6 +584,66 @@ public sealed class GameDataViewModel : ObservableObject, IToolkitModule
         if (!ProjectWriter.Apply(root, "Add trainer class", "src", files, [.. notes])) return;
         _ = LoadAsync();
         _ctx.Reload();
+    }
+
+    private bool PlatinumTablesUnchanged(string title)
+    {
+        if (!HasUnsavedChanges) return true;
+        ProjectWriter.Warn(title, "Save or discard the changed values first.");
+        return false;
+    }
+
+    private void AddPlatinumTrainerClass()
+    {
+        var p = _ctx.Platinum;
+        if (p == null || !PlatinumTablesUnchanged("Add trainer class")) return;
+        var dlg = new Platinum.NewTrainerClassWindow(p.Root, p.TrainerClasses, Selected?.Key);
+        if (dlg.ShowDialog() != true || dlg.Result is not { } c) return;
+        try
+        {
+            var (files, notes) = Core.Platinum.PlatinumTrainerClasses.PlanAdd(p.Root, c);
+            if (Platinum.PlatinumModules.Write(_ctx, "Add trainer class", files, [.. notes, $"Choose {c.Constant} for trainers in the Trainers module, then build the ROM."])) _ = LoadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException or Core.Imaging.PngFormatException or System.Text.Json.JsonException)
+        {
+            ProjectWriter.Warn("Add trainer class", ex.Message);
+        }
+    }
+
+    private void AddPlatinumItem()
+    {
+        var p = _ctx.Platinum;
+        if (p == null || !PlatinumTablesUnchanged("Add item")) return;
+        string constant = "ITEM_", template = Selected?.Key ?? "ITEM_POTION", name = "", plural = "", description = "", price = "100";
+        while (true)
+        {
+            var dlg = new InputDialog("Add item",
+                "A new item is a copy of a similar item (its effect, use, battle use and icon) with its own name, price and description. " +
+                "It gets the next free number before MAX_ITEMS, so no existing item changes.",
+                ("Constant (ITEM_…)", constant), ("Copy from (an existing ITEM_…)", template), ("Name (at most 14 characters)", name),
+                ("Plural (empty = name + s)", plural), ("Description (\\n = new line, 3 lines fit)", description), ("Price (0–65535)", price));
+            if (dlg.ShowDialog() != true) return;
+            (constant, template, name, plural, description, price) = (dlg.Values[0], dlg.Values[1], dlg.Values[2], dlg.Values[3], dlg.Values[4], dlg.Values[5]);
+            constant = string.Join("_", constant.Trim().ToUpperInvariant().Split([' ', '-'], StringSplitOptions.RemoveEmptyEntries));
+            if (!constant.StartsWith("ITEM_", StringComparison.Ordinal)) constant = "ITEM_" + constant;
+            template = template.Trim().ToUpperInvariant();
+            if (!template.StartsWith("ITEM_", StringComparison.Ordinal)) template = "ITEM_" + template;
+            string? problem = !int.TryParse(price.Trim(), out var priceValue) ? "The price must be a number."
+                : p.Items.Contains(template) ? null : $"{template} is not an item.";
+            var text = Core.GameData.GameText.LoadPlatinum(p.Root);
+            problem ??= text.Check(name.Trim(), 14, true, false, "The name").Error ?? (description.Trim().Length > 0 ? text.Check(description.Trim(), 0, true, true, "The description").Error : null);
+            if (problem == null)
+            {
+                try
+                {
+                    var (files, notes) = Core.Platinum.PlatinumItems.PlanAdd(p.Root, new Core.Platinum.NewItem(constant, template, name, plural, description.Trim().Length > 0 ? description : name, priceValue, null));
+                    if (Platinum.PlatinumModules.Write(_ctx, "Add item", files, [.. notes, "Build the ROM afterwards."])) _ = LoadAsync();
+                    return;
+                }
+                catch (Exception ex) when (ex is InvalidDataException or IOException or FormatException) { problem = ex.Message; }
+            }
+            ProjectWriter.Warn("Add item", problem);
+        }
     }
 
     private static string NormalizeConstant(string s)

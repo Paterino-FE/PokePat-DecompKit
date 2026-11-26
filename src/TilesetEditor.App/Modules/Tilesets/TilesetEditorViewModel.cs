@@ -402,7 +402,7 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException or ArtworkImportException)
         {
-            MessageBox.Show(Owner, ex.Message, "Edit tileset", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDialog.Show(Owner, ex.Message, "Edit tileset", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -445,7 +445,7 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArtworkImportException)
         {
-            MessageBox.Show(Owner, ex.Message, "New tileset", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDialog.Show(Owner, ex.Message, "New tileset", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -538,7 +538,7 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
             {
                 var assign = ArtworkLoader.AssignLayers(pngs);
                 var text = string.Join("\n", assign.Select(kv => $"{LayerNames.German(kv.Key)}: {Path.GetFileName(kv.Value)}"));
-                if (MessageBox.Show(Owner, $"The files will be assigned to these layers:\n\n{text}\n\nContinue?",
+                if (AppDialog.Show(Owner, $"The files will be assigned to these layers:\n\n{text}\n\nContinue?",
                         "Assign layers", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
                 art = ArtworkLoader.LoadLayers(assign);
             }
@@ -561,7 +561,7 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
         }
         catch (ArtworkImportException ex)
         {
-            MessageBox.Show(Owner, ex.Message, "Import not possible", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDialog.Show(Owner, ex.Message, "Import not possible", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -580,7 +580,7 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
     private bool ConfirmDiscard()
     {
         if (Artwork == null || _exported) return true;
-        return MessageBox.Show(Owner, "The current import has not been exported yet and will be lost. Continue?",
+        return AppDialog.Show(Owner, "The current import has not been exported yet and will be lost. Continue?",
             "Replace import", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
     }
 
@@ -709,7 +709,7 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
         if (change.LosesColors)
         {
             var examples = string.Join("\n", change.Mapping.Take(12).Select(m => $"  {m.From.ToHex()} → {m.To.ToHex()}"));
-            var answer = MessageBox.Show(Owner,
+            var answer = AppDialog.Show(Owner,
                 $"{title}\n\nThis merges colors: {change.UniqueBefore} → {change.UniqueAfter} colors " +
                 $"({change.LostColors} lost, {change.ChangedPixels} pixels change).\n\n{examples}" +
                 (change.Mapping.Count > 12 ? $"\n  … and {change.Mapping.Count - 12} more" : "") +
@@ -738,7 +738,7 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
         var p = _ctx.Project;
         if (p == null || Artwork == null || SelectedPrimary == null) return;
         if (interactive && _preIssues.Any(i => i.Severity == IssueSeverity.Error) &&
-            MessageBox.Show(Owner, "The pre-check reports errors. Porytiles will likely fail, but it will provide its own diagnostics. Compile anyway?",
+            AppDialog.Show(Owner, "The pre-check reports errors. Porytiles will likely fail, but it will provide its own diagnostics. Compile anyway?",
                 "Compile", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
         IsCompiling = true;
@@ -819,12 +819,12 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
         }
         catch (ExportValidationException ex)
         {
-            MessageBox.Show(Owner, ex.Message, "Export not possible", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDialog.Show(Owner, ex.Message, "Export not possible", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         catch (IOException ex)
         {
-            MessageBox.Show(Owner, ex.Message, "Export not possible", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDialog.Show(Owner, ex.Message, "Export not possible", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -840,7 +840,7 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
         if (!result.Success)
         {
             AppendLog("Export failed: " + result.Error);
-            MessageBox.Show(Owner,
+            AppDialog.Show(Owner,
                 $"Export failed: {result.Error}\n\n" +
                 (result.RolledBack ? "All changes were rolled back." + (result.RollbackProblems.Count > 0 ? "\nProblems during rollback:\n" + string.Join("\n", result.RollbackProblems) : "") : ""),
                 "Export", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -848,7 +848,7 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
         }
         _exported = true;
         AppendLog($"Exported to {plan.TilesetFolder} ({result.Written.Count} files). Backup: {result.BackupDir}");
-        MessageBox.Show(Owner,
+        AppDialog.Show(Owner,
             $"{name} was exported.\n\nFolder: {plan.TilesetFolder}\nModified: {string.Join(", ", plan.Modified.Select(f => Path.GetFileName(f.RelativePath)))}\n" +
             $"Backup of the modified files: {result.BackupDir}\n\nNext step: open the layout in Porymap and select \"{name}\" as the secondary tileset.",
             "Export complete", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -863,7 +863,7 @@ public sealed class TilesetEditorViewModel : ObservableObject, IToolkitModule
 
     private static Window? Owner => Application.Current?.MainWindow;
 
-    private static void Message(string text) => MessageBox.Show(Owner, text, "Tileset editor", MessageBoxButton.OK, MessageBoxImage.Information);
+    private static void Message(string text) => AppDialog.Show(Owner, text, "Tileset editor", MessageBoxButton.OK, MessageBoxImage.Information);
 
     private void AppendLog(string line)
     {

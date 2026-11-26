@@ -1,4 +1,4 @@
-<Window x:Class="TilesetEditor.App.Modules.Events.NewPersonWindow"
+<Window Icon="pack://application:,,,/Assets/decompkit.ico" x:Class="TilesetEditor.App.Modules.Events.NewPersonWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="New on map" Width="520" SizeToContent="Height" WindowStartupLocation="CenterOwner" ShowInTaskbar="False"

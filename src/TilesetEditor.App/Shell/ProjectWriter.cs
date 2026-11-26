@@ -1,3 +1,4 @@
+using TilesetEditor.App.Infrastructure;
 using System.IO;
 using System.Text;
 using System.Windows;
@@ -26,18 +27,18 @@ public static class ProjectWriter
     public static bool Apply(string root, string title, string folder, IReadOnlyList<PlannedFile> files, params string[] notes)
     {
         if (files.Count == 0) return false;
-        var plan = ExportPlan.ForFiles(root, title, folder, files);
+        var plan = Infrastructure.Perf.Time("prepare file list", () => ExportPlan.ForFiles(root, title, folder, files));
         plan.Notes.AddRange(notes);
         if (new ExportPlanWindow(plan) { Owner = Application.Current.MainWindow }.ShowDialog() != true) return false;
-        var result = new ExportApplier().Apply(plan);
+        var result = Infrastructure.Perf.Time($"write {files.Count} file(s): {title}", () => new ExportApplier().Apply(plan));
         if (result.Success) return true;
-        MessageBox.Show(Application.Current.MainWindow, "Error: " + result.Error + (result.RolledBack ? "\nAll changes were rolled back." : ""),
+        AppDialog.Show(Application.Current.MainWindow, "Error: " + result.Error + (result.RolledBack ? "\nAll changes were rolled back." : ""),
             title, MessageBoxButton.OK, MessageBoxImage.Error);
         return false;
     }
 
     public static void Warn(string title, string message) =>
-        MessageBox.Show(Application.Current.MainWindow, message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
+        AppDialog.Show(Application.Current.MainWindow, message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
 }
 
 /// <summary>Small dialog with labelled text fields (built in code, no XAML).</summary>

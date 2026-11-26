@@ -79,7 +79,7 @@ public partial class SetupWindow : Window
 
     private void BrowseProject(object sender, RoutedEventArgs e)
     {
-        var dlg = new OpenFolderDialog { Title = "Folder of your pokeemerald-expansion project (contains the Makefile)" };
+        var dlg = new OpenFolderDialog { Title = "Folder of your pokeemerald-expansion or pokeplatinum project (contains the Makefile)" };
         if (ProjectBox.Text.Trim().Length > 0) dlg.InitialDirectory = ProjectBox.Text.Trim();
         if (dlg.ShowDialog(this) == true) ProjectBox.Text = dlg.FolderName;
     }
@@ -87,7 +87,7 @@ public partial class SetupWindow : Window
     private void BrowseExe(object sender, RoutedEventArgs e)
     {
         var which = (string)((Button)sender).Tag;
-        var dlg = new OpenFileDialog { Filter = "Programs|*.exe|All files|*.*", Title = which == "Porymap" ? "porymap.exe" : "Emulator (e.g. mGBA.exe)" };
+        var dlg = new OpenFileDialog { Filter = "Programs|*.exe|All files|*.*", Title = which == "Porymap" ? "porymap.exe" : "Emulator (mGBA.exe or melonDS.exe)" };
         if (dlg.ShowDialog(this) != true) return;
         (which == "Porymap" ? PorymapBox : EmulatorBox).Text = dlg.FileName;
     }

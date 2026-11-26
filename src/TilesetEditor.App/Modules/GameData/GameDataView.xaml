@@ -41,10 +41,12 @@
                       ToolTip="Show only items of one pocket or kind, moves of one type or category, Pokémon of one type"
                       AutomationProperties.Name="Category filter"/>
             <CheckBox Content="Changed only" IsChecked="{Binding ChangedOnly}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <CheckBox Content="Cards with icons" IsChecked="{Binding UseCards}" VerticalAlignment="Center" Margin="0,0,12,0"
+                      Visibility="{Binding HasCardView, Converter={StaticResource BoolVis}}" ToolTip="Show the items as cards with their icons instead of the table"/>
             <Button Content="Save changes…" Command="{Binding SaveCommand}" FontWeight="SemiBold"/>
             <Button Content="Discard" Command="{Binding ResetCommand}"/>
-            <Button Content="Add trainer class…" Command="{Binding AddTrainerClassCommand}"
-                    Visibility="{Binding IsTrainerClasses, Converter={StaticResource BoolVis}}"/>
+            <Button Content="{Binding AddButtonText}" Command="{Binding AddTrainerClassCommand}" FontWeight="SemiBold"
+                    Visibility="{Binding CanAddEntry, Converter={StaticResource BoolVis}}"/>
             <Button Content="Show in Explorer" Command="{Binding ShowInExplorerCommand}"/>
         </WrapPanel>
         <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding QuickFilterButtons}" Margin="0,0,0,2"
@@ -80,6 +82,8 @@
             <TextBlock DockPanel.Dock="Top" Text="Tables" Style="{StaticResource SectionTitle}"/>
             <ListBox ItemsSource="{Binding Tables}" SelectedItem="{Binding SelectedTable}" DisplayMemberPath="Display" AutomationProperties.Name="Game data tables"/>
         </DockPanel>
+        <Grid>
+        <ContentControl x:Name="Cards" Visibility="Collapsed"/>
         <DataGrid x:Name="Grid" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
                   HeadersVisibility="Column" GridLinesVisibility="Horizontal" SelectionMode="Single" SelectionUnit="FullRow"
                   EnableRowVirtualization="True" EnableColumnVirtualization="True" VirtualizingPanel.VirtualizationMode="Recycling"
@@ -93,5 +97,6 @@
                 </Style>
             </DataGrid.RowStyle>
         </DataGrid>
+        </Grid>
     </DockPanel>
 </UserControl>

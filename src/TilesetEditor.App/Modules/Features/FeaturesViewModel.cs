@@ -203,7 +203,7 @@ public sealed class FeaturesViewModel : ObservableObject, IToolkitModule
         }
         catch (Exception ex) when (ex is ConfigConflictException or IOException)
         {
-            MessageBox.Show(Application.Current.MainWindow, ex.Message, "Save features", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDialog.Show(Application.Current.MainWindow, ex.Message, "Save features", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         var plan = ExportPlan.ForFiles(root, "Features", "include/config", files);
@@ -213,7 +213,7 @@ public sealed class FeaturesViewModel : ObservableObject, IToolkitModule
         var result = new ExportApplier().Apply(plan);
         if (!result.Success)
         {
-            MessageBox.Show(Application.Current.MainWindow, "Error: " + result.Error, "Save features", MessageBoxButton.OK, MessageBoxImage.Error);
+            AppDialog.Show(Application.Current.MainWindow, "Error: " + result.Error, "Save features", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
         foreach (var r in _all) r.Reset();

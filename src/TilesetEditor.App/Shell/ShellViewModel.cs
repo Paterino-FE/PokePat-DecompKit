@@ -17,6 +17,8 @@ using TilesetEditor.App.Modules.SecretBases;
 using TilesetEditor.App.Modules.Sprites;
 using TilesetEditor.App.Modules.Tilesets;
 using TilesetEditor.App.Modules.Trainers;
+using TilesetEditor.App.Platinum;
+using TilesetEditor.Core.Project;
 using TilesetEditor.Toolkit;
 
 namespace TilesetEditor.App.Shell;
@@ -31,21 +33,26 @@ public sealed class ShellViewModel : ObservableObject
     public ShellViewModel()
     {
         Context = new ProjectContext();
-        Modules.Add(new ProjectOverviewViewModel(Context, Navigate));
+        // Pokémon Emerald (pokeemerald-expansion)
+        _emeraldModules.Add(new ProjectOverviewViewModel(Context, Navigate));
         _tilesets = new TilesetEditorViewModel(Context);
-        Modules.Add(_tilesets);
+        _emeraldModules.Add(_tilesets);
         _maps = new MapsViewModel(Context, NewTilesetForPrimary, map => OpenInPorymap(map));
-        Modules.Add(_maps);
-        Modules.Add(new SecretBasesViewModel(Context));
-        Modules.Add(new EventsViewModel(Context));
-        Modules.Add(new FlagsViewModel(Context));
-        Modules.Add(new TrainersViewModel(Context));
-        Modules.Add(new GameDataViewModel(Context));
-        Modules.Add(new SpritesViewModel(Context));
-        Modules.Add(new GraphicsViewModel(Context));
-        Modules.Add(new FeaturesViewModel(Context));
-        Modules.Add(new Modules.Mods.ModsViewModel(Context));
-        foreach (var m in PlannedModule.Roadmap()) Modules.Add(m);
+        _emeraldModules.Add(_maps);
+        _emeraldModules.Add(new SecretBasesViewModel(Context));
+        _emeraldModules.Add(new EventsViewModel(Context));
+        _emeraldModules.Add(new FlagsViewModel(Context));
+        _emeraldModules.Add(new TrainersViewModel(Context));
+        _emeraldModules.Add(new GameDataViewModel(Context));
+        _emeraldModules.Add(new SpritesViewModel(Context));
+        _emeraldModules.Add(new GraphicsViewModel(Context));
+        _emeraldModules.Add(new FeaturesViewModel(Context));
+        _emeraldModules.Add(new Modules.Mods.ModsViewModel(Context));
+        _emeraldModules.Add(new BackupsViewModel(Context));
+        foreach (var m in PlannedModule.Roadmap()) _emeraldModules.Add(m);
+        // Pokémon Platinum (pokeplatinum)
+        foreach (var m in PlatinumModules.Create(Context, Navigate)) _platinumModules.Add(m);
+        ShowModulesFor(GameKinds.Parse(Context.Settings.PreferredGame));
         _selectedModule = Modules[0];
 
         // Porymap bridge: Porymap reports its open map via porymap.log (see PorymapBridge.cs).
@@ -56,7 +63,7 @@ public sealed class ShellViewModel : ObservableObject
         OpenProjectCommand = new RelayCommand(BrowseProject, () => !IsBuilding);
         SetupCommand = new RelayCommand(RunSetup, () => !IsBuilding);
         OpenRecentCommand = new RelayCommand(p => { if (p is string s) OpenProject(s); }, _ => !IsBuilding);
-        OpenInPorymapCommand = new RelayCommand(OpenInPorymap, () => Context.IsOpen);
+        OpenInPorymapCommand = new RelayCommand(OpenInPorymap, () => Context.IsOpen && Context.Game == GameKind.Emerald);
         BuildCommand = new AsyncRelayCommand(BuildAsync, () => Context.IsOpen && !IsBuilding);
         CancelBuildCommand = new RelayCommand(() => _buildCts?.Cancel(), () => IsBuilding);
         OpenInEmulatorCommand = new RelayCommand(OpenInEmulator, () => CanOpenInEmulator);
@@ -73,10 +80,14 @@ public sealed class ShellViewModel : ObservableObject
             OnPropertyChanged(nameof(ThemeButtonText));
         });
         ToggleBuildPanelCommand = new RelayCommand(() => { _buildNumber++; ShowBuildPanel = !ShowBuildPanel; }); // a manual toggle cancels the auto-hide
+        ShowProblemCommand = new RelayCommand(p => { if (p is BuildProblemVm b) ShowProblem(b); });
+        OpenProblemFileCommand = new RelayCommand(p => { if (p is BuildProblemVm b) OpenProblemFile(b.Problem); });
 
         _flushTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(200), DispatcherPriority.Background, (_, _) => FlushOutput(), Dispatcher.CurrentDispatcher);
-        Context.ProjectChanged += (_, _) =>
+        Context.AnyProjectChanged += (_, _) =>
         {
+            if (Context.Game is { } game) ShowModulesFor(game); // also shows/hides optional modules (mods switched on/off)
+            UpdateGameLook();
             OnPropertyChanged(nameof(WindowTitle));
             OnPropertyChanged(nameof(ProjectHeader));
             OnPropertyChanged(nameof(RecentProjects));
@@ -93,7 +104,54 @@ public sealed class ShellViewModel : ObservableObject
     }
 
     public ProjectContext Context { get; }
+    /// <summary>The navigation: the modules of the game of the open project.</summary>
     public ObservableCollection<IToolkitModule> Modules { get; } = [];
+    private readonly List<IToolkitModule> _emeraldModules = [];
+    private readonly List<IToolkitModule> _platinumModules = [];
+    /// <summary>Every module of every game (unsaved changes are checked in all of them).</summary>
+    public IEnumerable<IToolkitModule> AllModules => _emeraldModules.Concat(_platinumModules);
+
+    private GameKind _shownGame;
+    /// <summary>The game whose modules the navigation shows.</summary>
+    public GameKind ShownGame { get => _shownGame; private set { if (Set(ref _shownGame, value)) { OnPropertyChanged(nameof(GameSubtitle)); OnPropertyChanged(nameof(IsEmerald)); } UpdateGameLook(); } }
+
+    private System.Windows.Media.ImageSource? _gameLogo;
+    /// <summary>The game's mascot from the open project's own sprites (Rayquaza / Giratina); null = the Pokéball logo.</summary>
+    public System.Windows.Media.ImageSource? GameLogo { get => _gameLogo; private set => Set(ref _gameLogo, value); }
+    public string GameLogoTip => Context.IsOpen ? $"{ShownGame.Title()} – picture from your project" : "PokéPat DecompKit";
+    private string? _logoFor;
+
+    /// <summary>Colours and logo of the shown game; the Pokémon Center look stays while no project is open.</summary>
+    private void UpdateGameLook()
+    {
+        bool open = Context.IsOpen && Context.Game == ShownGame;
+        Infrastructure.ThemeManager.ApplyStyle(!open ? Infrastructure.GameStyle.Center : ShownGame == GameKind.Platinum ? Infrastructure.GameStyle.Platinum : Infrastructure.GameStyle.Emerald);
+        var key = open ? $"{ShownGame}|{Context.Root}" : null;
+        if (key == _logoFor) return;
+        _logoFor = key;
+        GameLogo = null;
+        OnPropertyChanged(nameof(GameLogoTip));
+        if (!open || Context.Root is not { } root) return;
+        var game = ShownGame;
+        Task.Run(() => GameMascot.Load(root, game)).ContinueWith(t =>
+        {
+            if (_logoFor == key && t.IsCompletedSuccessfully && t.Result is { } img) GameLogo = Infrastructure.Imaging.ToBitmap(img);
+        }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+    public bool IsEmerald => ShownGame == GameKind.Emerald;
+    /// <summary>Under the logo: which decomp the open project is based on.</summary>
+    public string GameSubtitle => $"{ShownGame.Title()} · {ShownGame.DecompName()}";
+
+    private void ShowModulesFor(GameKind game)
+    {
+        var list = (game == GameKind.Platinum ? _platinumModules : _emeraldModules).Where(m => m is not IOptionalModule o || o.IsShown).ToList();
+        if (Modules.Count > 0 && Modules.SequenceEqual(list)) { ShownGame = game; return; }
+        var keep = _selectedModule?.Title;
+        Modules.Clear();
+        foreach (var m in list) Modules.Add(m);
+        ShownGame = game;
+        SelectedModule = Modules.FirstOrDefault(m => m.Title == keep) ?? Modules[0];
+    }
 
     private readonly TilesetEditorViewModel _tilesets;
     private readonly MapsViewModel _maps;
@@ -171,7 +229,8 @@ public sealed class ShellViewModel : ObservableObject
             if (!Context.IsOpen) return Context.LoadError != null ? "Could not open project: " + Context.LoadError : "No project open";
             var env = Context.Environment!;
             return $"{Context.Root}   ·   Branch: {(env.IsGitRepository ? env.GitBranch : "–")}" +
-                   (Context.Project!.ExpansionVersion != null ? $"   ·   expansion {Context.Project.ExpansionVersion}" : "");
+                   (Context.Project?.ExpansionVersion != null ? $"   ·   expansion {Context.Project.ExpansionVersion}" : "") +
+                   (Context.Game == GameKind.Platinum ? "   ·   pokeplatinum" : "");
         }
     }
 
@@ -220,20 +279,59 @@ public sealed class ShellViewModel : ObservableObject
         (System.Reflection.Assembly.GetExecutingAssembly().GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
             .FirstOrDefault() as System.Reflection.AssemblyInformationalVersionAttribute)?.InformationalVersion.Split('+')[0] ?? "0.0.0";
 
-    /// <summary>Check on start (option in Get started, at most once a day): shows a notice when something can be updated.</summary>
+    // ------------------------------------------------------------------ PokéPat's own updates
+
+    private TilesetEditor.Toolkit.Install.AppRelease? _appUpdate;
+    /// <summary>A newer PokéPat release (found by the check on start or by "⟳").</summary>
+    public TilesetEditor.Toolkit.Install.AppRelease? AppUpdate
+    {
+        get => _appUpdate;
+        private set { if (Set(ref _appUpdate, value)) { OnPropertyChanged(nameof(HasAppUpdate)); OnPropertyChanged(nameof(AppUpdateButtonText)); OnPropertyChanged(nameof(AppUpdateTip)); } }
+    }
+    public bool HasAppUpdate => AppUpdate != null;
+    public string AppUpdateButtonText => AppUpdate != null ? $"⬆ PokéPat {AppUpdate.Version}" : "⟳";
+    public string AppUpdateTip => AppUpdate != null ? $"PokéPat {AppUpdate.Version} is available (you have {AppVersion}) – see what is new and update." : $"PokéPat {AppVersion} – check for a newer version";
+    private bool _checkingApp;
+
+    /// <summary>"⟳": checks now; "⬆": shows what is new and updates.</summary>
+    public ICommand AppUpdateCommand => new RelayCommand(async () =>
+    {
+        if (AppUpdate is { } u) { ShowAppUpdate(u); return; }
+        if (_checkingApp) return;
+        _checkingApp = true;
+        try
+        {
+            AppUpdate = await TilesetEditor.Toolkit.Install.AppSelfUpdate.CheckAsync(AppVersion);
+            if (AppUpdate is { } found) ShowAppUpdate(found);
+            else ProjectWriter.Warn("PokéPat", $"You have the newest version ({AppVersion}) – or GitHub cannot be reached right now.");
+        }
+        finally { _checkingApp = false; }
+    }, () => !IsBuilding);
+
+    private void ShowAppUpdate(TilesetEditor.Toolkit.Install.AppRelease u)
+    {
+        var unsaved = Modules.Concat(_emeraldModules).Concat(_platinumModules).Distinct().Where(m => m.HasUnsavedChanges).Select(m => m.UnsavedChangesDescription ?? m.Title).ToList();
+        new AppUpdateWindow(u, AppVersion, unsaved) { Owner = System.Windows.Application.Current.MainWindow }.ShowDialog();
+    }
+
+    /// <summary>Check on start (option in Get started): PokéPat itself on every start, the tools at most once a day.</summary>
     public async void CheckUpdatesInBackground()
     {
         var s = Context.Settings;
-        if (!s.CheckUpdatesOnStart || NeedsSetup || s.LastUpdateCheckUtc > DateTime.UtcNow.AddHours(-20)) return;
+        if (!s.CheckUpdatesOnStart || NeedsSetup) return;
         try
         {
-            var installer = new TilesetEditor.Toolkit.Install.Installer(TilesetEditor.Toolkit.Install.InstallOptions.FromSettings(s));
-            var found = await Task.Run(() => installer.CheckAllUpdatesAsync());
-            var app = await TilesetEditor.Toolkit.Install.Installer.CheckAppUpdateAsync(AppVersion);
-            s.LastUpdateCheckUtc = DateTime.UtcNow;
-            Context.Save();
-            var names = found.Select(u => $"{TilesetEditor.Toolkit.Install.Installer.Title(u.Component)} {u.Latest}").ToList();
-            if (app != null) names.Insert(0, $"PokéPat {app.Version}");
+            AppUpdate = await TilesetEditor.Toolkit.Install.AppSelfUpdate.CheckAsync(AppVersion);
+            var names = new List<string>();
+            if (AppUpdate != null) names.Add($"PokéPat {AppUpdate.Version}");
+            if (s.LastUpdateCheckUtc <= DateTime.UtcNow.AddHours(-20))
+            {
+                var installer = new TilesetEditor.Toolkit.Install.Installer(TilesetEditor.Toolkit.Install.InstallOptions.FromSettings(s));
+                var found = await Task.Run(() => installer.CheckAllUpdatesAsync());
+                s.LastUpdateCheckUtc = DateTime.UtcNow;
+                Context.Save();
+                names.AddRange(found.Select(u => $"{TilesetEditor.Toolkit.Install.Installer.Title(u.Component, installer.Options.Game)} {u.Latest}"));
+            }
             if (names.Count > 0) UpdateNotice = "Updates available: " + string.Join(", ", names) + ".";
         }
         catch (Exception ex) when (ex is IOException or System.Net.Http.HttpRequestException or InvalidOperationException or UnauthorizedAccessException)
@@ -248,6 +346,8 @@ public sealed class ShellViewModel : ObservableObject
     public ICommand OpenInEmulatorCommand { get; }
     public ICommand ShowRomInExplorerCommand { get; }
     public ICommand ToggleBuildPanelCommand { get; }
+    public ICommand ShowProblemCommand { get; }
+    public ICommand OpenProblemFileCommand { get; }
     public ICommand ToggleThemeCommand { get; }
     /// <summary>Moon in the light theme, sun in the dark one.</summary>
     public string ThemeButtonText => ThemeManager.IsDark ? "🔆 Light" : "🌙 Dark";
@@ -268,18 +368,18 @@ public sealed class ShellViewModel : ObservableObject
 
     private void BrowseProject()
     {
-        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Select pokeemerald project folder", InitialDirectory = Context.Root };
+        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Select project folder (pokeemerald-expansion or pokeplatinum)", InitialDirectory = Context.Root };
         if (dlg.ShowDialog(Application.Current.MainWindow) == true) OpenProject(dlg.FolderName);
     }
 
     public void OpenProject(string root)
     {
-        var dirty = Modules.Where(m => m.HasUnsavedChanges).Select(m => m.UnsavedChangesDescription).ToList();
+        var dirty = AllModules.Where(m => m.HasUnsavedChanges).Select(m => m.UnsavedChangesDescription).ToList();
         if (Context.IsOpen && dirty.Count > 0 &&
-            MessageBox.Show(Application.Current.MainWindow, "Unsaved changes will be lost when switching projects:\n\n" + string.Join("\n", dirty) + "\n\nSwitch anyway?",
+            AppDialog.Show(Application.Current.MainWindow, "Unsaved changes will be lost when switching projects:\n\n" + string.Join("\n", dirty) + "\n\nSwitch anyway?",
                 "Open project", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         if (!Context.Open(root))
-            MessageBox.Show(Application.Current.MainWindow, Context.LoadError, "Open project", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDialog.Show(Application.Current.MainWindow, Context.LoadError, "Open project", MessageBoxButton.OK, MessageBoxImage.Warning);
         OnPropertyChanged(nameof(ProjectHeader));
     }
 
@@ -292,7 +392,7 @@ public sealed class ShellViewModel : ObservableObject
     {
         var r = PorymapLauncher.OpenProject(Context.Tools.PorymapExe, Context.Root!, mapName);
         if (r.Started) { BuildStatus = r.Message; return; }
-        MessageBox.Show(Application.Current.MainWindow, r.Message, "Open in Porymap", MessageBoxButton.OK, MessageBoxImage.Warning);
+        AppDialog.Show(Application.Current.MainWindow, r.Message, "Open in Porymap", MessageBoxButton.OK, MessageBoxImage.Warning);
         if (string.IsNullOrWhiteSpace(Context.Tools.PorymapExe)) Navigate("Project");
     }
 
@@ -334,7 +434,7 @@ public sealed class ShellViewModel : ObservableObject
         if (!Context.IsOpen) return;
         var dirty = Modules.Where(m => m.HasUnsavedChanges).Select(m => m.UnsavedChangesDescription).ToList();
         if (dirty.Count > 0 &&
-            MessageBox.Show(Application.Current.MainWindow,
+            AppDialog.Show(Application.Current.MainWindow,
                 "The build only uses the saved project files. The toolkit has unsaved changes that will NOT be included in the build:\n\n" +
                 string.Join("\n", dirty) + "\n\nBuild anyway?", "Build ROM", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
@@ -342,6 +442,8 @@ public sealed class ShellViewModel : ObservableObject
         ResetBuildResult();
         _buildNumber++; // a pending auto-hide of the previous build must not close this build's panel
         BuildOutput = "";
+        BuildProblems.Clear();
+        OnPropertyChanged(nameof(HasBuildProblems));
         lock (_pendingOutput) _pendingOutput.Clear();
         ShowBuildPanel = true;
         IsBuilding = true;
@@ -358,6 +460,7 @@ public sealed class ShellViewModel : ObservableObject
             ConfirmedRomPath = result.Success ? result.ConfirmedRomPath : null;
             var sb = new StringBuilder(result.Message);
             sb.Append($"  ({result.Duration.TotalSeconds:0}s)");
+            if (!result.Success && !result.Cancelled) ListProblems();
             if (!result.Success && result.ErrorLines.Count > 0)
                 AppendOutput("\n=== Error lines ===\n" + string.Join("\n", result.ErrorLines.TakeLast(15)));
             BuildStatus = sb.ToString();
@@ -414,10 +517,83 @@ public sealed class ShellViewModel : ObservableObject
         BuildOutput = text;
     }
 
+    // ---- Build problems
+
+    /// <summary>The problems of the last failed build, from its log (file and line where the tools say so).</summary>
+    public ObservableCollection<BuildProblemVm> BuildProblems { get; } = [];
+    public bool HasBuildProblems => BuildProblems.Count > 0;
+
+    private void ListProblems()
+    {
+        BuildProblems.Clear();
+        var found = TilesetEditor.Core.Project.BuildProblems.Parse(BuildOutput, Context.Root);
+        // Errors first (in log order: the first one is usually the cause, later ones follow from it), then warnings.
+        int n = 0;
+        foreach (var p in found.Where(p => p.IsError).Concat(found.Where(p => !p.IsError)).Take(200))
+            BuildProblems.Add(new BuildProblemVm(p, n++ == 0 && p.IsError, ShowTarget(p)));
+        OnPropertyChanged(nameof(HasBuildProblems));
+    }
+
+    /// <summary>Where PokéPat itself can show the place of a problem (Platinum map scripts, events and texts), else null.</summary>
+    private string? ShowTarget(BuildProblem p)
+    {
+        if (p.File == null || Context.Platinum is not { } plat) return null;
+        if (plat.MapHeaders.FirstOrDefault(h => h.EventsFile == p.File || h.ScriptFile == p.File) is { } h)
+            return h.EventsFile == p.File ? "Events & Dialogs: " + h.FriendlyName : "Events & Dialogs: " + h.FriendlyName + " (script)";
+        if (plat.MapHeaders.FirstOrDefault(x => x.TextFile == p.File && x.EventsFile != null) is { } t) return "Texts of " + t.FriendlyName;
+        return null;
+    }
+
+    private void ShowProblem(BuildProblemVm b)
+    {
+        var p = b.Problem;
+        if (b.ShowIn == null || Context.Platinum is not { } plat) { OpenProblemFile(p); return; }
+        Navigate("Events & Dialogs");
+        if (SelectedModule is not PlatinumEventsViewModel events) return;
+        if (plat.MapHeaders.FirstOrDefault(h => h.EventsFile == p.File || h.ScriptFile == p.File) is { } h)
+        {
+            if (h.EventsFile == p.File) events.OpenEvent(h.Id, "", -1);
+            else events.OpenScriptAt(h.Id, p.Line);
+            return;
+        }
+        var owners = plat.MapHeaders.Where(x => x.TextFile == p.File && x.EventsFile != null).ToList();
+        var stem = Path.GetFileNameWithoutExtension(p.File!).ToUpperInvariant();
+        var owner = owners.FirstOrDefault(x => x.Id == "MAP_HEADER_" + stem) ?? owners.FirstOrDefault();
+        if (owner != null) events.OpenText(owner.Id, TextIdAt(Path.Combine(Context.Root!, p.File!), p.Line) ?? "");
+    }
+
+    /// <summary>The id of the text a line of a res/text/*.json belongs to (the last "id" at or before the line).</summary>
+    private static string? TextIdAt(string file, int? line)
+    {
+        if (line == null || !File.Exists(file)) return null;
+        string? id = null;
+        int n = 0;
+        foreach (var l in File.ReadLines(file))
+        {
+            if (++n > line) break;
+            var m = System.Text.RegularExpressions.Regex.Match(l, "\"id\"\\s*:\\s*\"([^\"]+)\"");
+            if (m.Success) id = m.Groups[1].Value;
+        }
+        return id;
+    }
+
+    private void OpenProblemFile(BuildProblem p)
+    {
+        if (p.File == null || Context.Root == null) return;
+        var full = ProjectPaths.Combine(Context.Root, p.File);
+        if (!File.Exists(full))
+        {
+            AppDialog.Show(Application.Current.MainWindow, $"{p.File} is not in the project (it is made by the build).\n\n{p.Message}", "Build problem", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var r = FileOpener.OpenAt(full, p.Line);
+        if (r != null) BuildStatus = r;
+    }
+
     private void OpenInEmulator()
     {
         if (ConfirmedRomPath == null) return;
         var r = EmulatorLauncher.Launch(Context.Tools.EmulatorExe, ConfirmedRomPath);
-        if (!r.Started) MessageBox.Show(Application.Current.MainWindow, r.Message, "Emulator", MessageBoxButton.OK, MessageBoxImage.Warning);
+        if (!r.Started) AppDialog.Show(Application.Current.MainWindow, r.Message, "Emulator", MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 }

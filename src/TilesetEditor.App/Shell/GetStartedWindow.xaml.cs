@@ -1,3 +1,4 @@
+using TilesetEditor.App.Infrastructure;
 using System.Windows;
 using Microsoft.Win32;
 using TilesetEditor.Toolkit;
@@ -28,7 +29,7 @@ public partial class GetStartedWindow : Window
         Closing += (_, e) =>
         {
             if (!_vm.IsBusy) return;
-            if (MessageBox.Show(this, "PokéPat is still installing. Stop and close?", Title, MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            if (AppDialog.Show(this, "PokéPat is still installing. Stop and close?", Title, MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
                 e.Cancel = true;
             else _vm.CancelCommand.Execute(null);
         };

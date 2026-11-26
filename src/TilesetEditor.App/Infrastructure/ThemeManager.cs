@@ -8,6 +8,9 @@ namespace TilesetEditor.App.Infrastructure;
 
 public enum AppTheme { System, Light, Dark }
 
+/// <summary>The look of the game being edited: Pokémon Center red (no project), Emerald green, Platinum purple and silver.</summary>
+public enum GameStyle { Center, Emerald, Platinum }
+
 /// <summary>
 /// Light (Pokémon Center: white walls, red roof) and dark theme. Every color of the UI is a brush resource referenced with
 /// DynamicResource, so switching replaces the brushes and everything updates at once – including the system colors the
@@ -40,6 +43,70 @@ public static class ThemeManager
         ["WarnTextBrush"] = ("#B45309", "#F2B544"),
     };
 
+    /// <summary>Per game: the colours that carry the game's character (accent, roof, tinted surfaces, selection).</summary>
+    private static readonly Dictionary<GameStyle, Dictionary<string, (string Light, string Dark)>> Styles = new()
+    {
+        [GameStyle.Center] = new(),
+        [GameStyle.Emerald] = new()
+        {
+            ["AccentBrush"] = ("#1E9B5A", "#35C47A"),
+            ["AccentDarkBrush"] = ("#13703F", "#86E3AF"),
+            ["PanelBrush"] = ("#F3FAF5", "#151B17"),
+            ["SurfaceBrush"] = ("#FFFFFF", "#1E2621"),
+            ["BorderBrush"] = ("#CFE5D7", "#33443A"),
+            ["PinkBrush"] = ("#E2F4E9", "#203229"),
+            ["PinkStrongBrush"] = ("#BEE5CC", "#2B5240"),
+            ["HoverBrush"] = ("#EDF8F1", "#22302A"),
+            ["InkBrush"] = ("#22332A", "#E4EEE8"),
+            ["MutedBrush"] = ("#5F7568", "#98AC9F"),
+            ["AltRowBrush"] = ("#F7FCF9", "#212924"),
+            ["ReadOnlyBrush"] = ("#F1F8F3", "#1A201C"),
+            ["#Roof"] = ("#2FB46B|#1E9B5A|#13703F", "#24985A|#17784A|#0E5233"),
+            ["#Selection"] = ("", "#2B5240|#223D31"),
+        },
+        [GameStyle.Platinum] = new()
+        {
+            ["AccentBrush"] = ("#6E4FB0", "#9C80DB"),
+            ["AccentDarkBrush"] = ("#4F3487", "#CDBBF5"),
+            ["PanelBrush"] = ("#F5F4F8", "#18171C"),
+            ["SurfaceBrush"] = ("#FFFFFF", "#222029"),
+            ["BorderBrush"] = ("#DAD5E4", "#3B3647"),
+            ["PinkBrush"] = ("#ECE7F6", "#2B2638"),
+            ["PinkStrongBrush"] = ("#D6CBEE", "#44375F"),
+            ["HoverBrush"] = ("#F2EEF9", "#2A2533"),
+            ["InkBrush"] = ("#2C2738", "#ECE9F2"),
+            ["MutedBrush"] = ("#6C6680", "#A49DB5"),
+            ["AltRowBrush"] = ("#FAF9FC", "#25222C"),
+            ["ReadOnlyBrush"] = ("#F4F2F8", "#1D1B22"),
+            ["#Roof"] = ("#8A6BC8|#6E4FB0|#4A3A6E", "#6F55A8|#563F8C|#2F2549"),
+            ["#Selection"] = ("", "#44375F|#352B4A"),
+        },
+    };
+
+    public static GameStyle Style { get; private set; } = GameStyle.Center;
+
+    /// <summary>Switches to the colours of another game (keeps light/dark).</summary>
+    public static void ApplyStyle(GameStyle style)
+    {
+        if (style == Style) return;
+        Style = style;
+        Apply(Current);
+    }
+
+    private static (string Light, string Dark) Pick(string key) =>
+        Styles[Style].TryGetValue(key, out var v) ? v : Palette.TryGetValue(key, out var b) ? b : ("", "");
+
+    private static LinearGradientBrush Roof(string stops)
+    {
+        var c = stops.Split('|').Select(x => (Color)ColorConverter.ConvertFromString(x)).ToArray();
+        var b = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
+        b.GradientStops.Add(new GradientStop(c[0], 0));
+        b.GradientStops.Add(new GradientStop(c[1], 0.55));
+        b.GradientStops.Add(new GradientStop(c[2], 1));
+        b.Freeze();
+        return b;
+    }
+
     public static AppTheme Current { get; private set; } = AppTheme.Light;
     public static bool IsDark { get; private set; }
     public static event EventHandler? Changed;
@@ -63,15 +130,18 @@ public static class ThemeManager
         Current = theme;
         IsDark = theme == AppTheme.Dark || (theme == AppTheme.System && SystemPrefersDark());
         var res = Application.Current.Resources;
-        foreach (var (key, (light, dark)) in Palette) res[key] = Brush(IsDark ? dark : light);
+        foreach (var key in Palette.Keys) { var (light, dark) = Pick(key); res[key] = Brush(IsDark ? dark : light); }
+        var roof = Styles[Style].TryGetValue("#Roof", out var r) ? (IsDark ? r.Dark : r.Light) : IsDark ? "#D8474D|#B8343B|#7E1D24" : "#EF4A4F|#E3343A|#B8212B";
+        res["RoofBrush"] = Roof(roof);
+        var selection = Styles[Style].TryGetValue("#Selection", out var sel) && sel.Dark.Length > 0 ? sel.Dark.Split('|') : ["#5C2E33", "#46292D"];
 
         // Colors of the standard controls (text boxes, combo box lists, menus, selection) follow the theme in dark mode;
         // in light mode Windows' own colors stay.
         var system = new (object Key, string Color)[]
         {
             (SystemColors.WindowBrushKey, "#272223"), (SystemColors.ControlBrushKey, "#2E2829"), (SystemColors.ControlTextBrushKey, "#EEE6E4"),
-            (SystemColors.WindowTextBrushKey, "#EEE6E4"), (SystemColors.GrayTextBrushKey, "#8C7F80"), (SystemColors.HighlightBrushKey, "#5C2E33"),
-            (SystemColors.HighlightTextBrushKey, "#FFFFFF"), (SystemColors.InactiveSelectionHighlightBrushKey, "#46292D"),
+            (SystemColors.WindowTextBrushKey, "#EEE6E4"), (SystemColors.GrayTextBrushKey, "#8C7F80"), (SystemColors.HighlightBrushKey, selection[0]),
+            (SystemColors.HighlightTextBrushKey, "#FFFFFF"), (SystemColors.InactiveSelectionHighlightBrushKey, selection[1]),
             (SystemColors.InactiveSelectionHighlightTextBrushKey, "#EEE6E4"), (SystemColors.ControlLightBrushKey, "#3A3233"),
             (SystemColors.ControlLightLightBrushKey, "#433A3B"), (SystemColors.ControlDarkBrushKey, "#5A4F50"), (SystemColors.ControlDarkDarkBrushKey, "#120F10"),
             (SystemColors.MenuBrushKey, "#272223"), (SystemColors.MenuTextBrushKey, "#EEE6E4"), (SystemColors.InfoBrushKey, "#272223"), (SystemColors.InfoTextBrushKey, "#EEE6E4"),

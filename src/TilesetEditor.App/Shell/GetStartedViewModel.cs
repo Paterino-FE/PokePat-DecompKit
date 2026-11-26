@@ -4,17 +4,18 @@ using System.Windows;
 using System.Windows.Input;
 using TilesetEditor.App.Infrastructure;
 using TilesetEditor.Compiler;
+using TilesetEditor.Core.Project;
 using TilesetEditor.Toolkit;
 using TilesetEditor.Toolkit.Install;
 
 namespace TilesetEditor.App.Shell;
 
 /// <summary>One part of the setup in the list: what it is, its state and its own install button.</summary>
-public sealed class InstallRowVm(InstallComponent component, GetStartedViewModel owner) : ObservableObject
+public sealed class InstallRowVm(InstallComponent component, GetStartedViewModel owner, GameKind game) : ObservableObject
 {
     public InstallComponent Component { get; } = component;
-    public string Title { get; } = Installer.Title(component);
-    public string Description { get; } = Installer.Description(component);
+    public string Title { get; } = Installer.Title(component, game);
+    public string Description { get; } = Installer.Description(component, game);
     public string Icon { get; } = component switch
     {
         InstallComponent.Wsl => "🐧",
@@ -101,11 +102,12 @@ public sealed class GetStartedViewModel : ObservableObject
     {
         _settings = settings;
         var current = InstallOptions.FromSettings(settings);
+        _game = current.Game;
         _distro = current.Distro;
         _projectPath = current.ProjectPath;
         _toolsFolder = current.ToolsFolder;
         _installer = NewInstaller();
-        foreach (var c in Installer.All) Rows.Add(new InstallRowVm(c, this));
+        foreach (var c in Installer.All) Rows.Add(new InstallRowVm(c, this, _game));
         InstallAllCommand = new RelayCommand(InstallAll, () => !IsBusy);
         CheckCommand = new RelayCommand(() => _ = CheckAllAsync(), () => !IsBusy);
         CancelCommand = new RelayCommand(() => _cts.Cancel(), () => IsBusy);
@@ -196,12 +198,51 @@ public sealed class GetStartedViewModel : ObservableObject
 
     private Installer NewInstaller() => new(new InstallOptions
     {
+        Game = Game,
         Distro = Distro,
-        ProjectPath = ProjectPath.Trim().Length > 0 ? ProjectPath.Trim() : "~/pokeemerald-expansion",
+        ProjectPath = ProjectPath.Trim().Length > 0 ? ProjectPath.Trim() : Game.DefaultProjectPath(),
         ToolsFolder = ToolsFolder.Trim().Length > 0 ? ToolsFolder.Trim() : InstallOptions.DefaultToolsFolder,
-        ExistingPorymap = InstallOptions.FromSettings(_settings).ExistingPorymap,
-        ExistingEmulator = InstallOptions.FromSettings(_settings).ExistingEmulator,
+        ExistingPorymap = InstallOptions.FromSettings(_settings, Game).ExistingPorymap,
+        ExistingEmulator = InstallOptions.FromSettings(_settings, Game).ExistingEmulator,
     });
+
+    // ---- Game choice (first step): decides the repository, the build tools and which parts are offered.
+
+    private GameKind _game;
+    public GameKind Game
+    {
+        get => _game;
+        set
+        {
+            if (IsBusy || !Set(ref _game, value)) return;
+            _settings.PreferredGame = value.ToString();
+            // The folder follows the game unless the user typed an own one.
+            var other = InstallOptions.FromSettings(_settings, value);
+            if (GameKinds.All.Any(g => ProjectPath.Trim() == g.DefaultProjectPath()) || ProjectPath.Trim().Length == 0)
+            {
+                _projectPath = other.ProjectPath;
+                OnPropertyChanged(nameof(ProjectPath));
+            }
+            Rows.Clear();
+            foreach (var c in Installer.All) Rows.Add(new InstallRowVm(c, this, value));
+            OnPropertyChanged(nameof(IsEmerald));
+            OnPropertyChanged(nameof(IsPlatinum));
+            OnPropertyChanged(nameof(ToolsHint));
+            OnPropertyChanged(nameof(GameHint));
+            SettingsChanged();
+        }
+    }
+
+    public bool IsEmerald { get => Game == GameKind.Emerald; set { if (value) Game = GameKind.Emerald; } }
+    public bool IsPlatinum { get => Game == GameKind.Platinum; set { if (value) Game = GameKind.Platinum; } }
+
+    public string GameHint => Game == GameKind.Platinum
+        ? "Pokémon Platinum (Nintendo DS) – pret/pokeplatinum. PokéPat edits Pokémon, sprites, trainers and game data and shows a preview of every map. Maps cannot be edited yet (there is no map editor for pokeplatinum)."
+        : "Pokémon Emerald (Game Boy Advance) – pokeemerald-expansion. Everything: tilesets, maps with Porymap, events and dialogs, trainers, game data, sprites, mods.";
+
+    public string ToolsHint => Game == GameKind.Platinum
+        ? "melonDS (the DS emulator) is a Windows program and goes here."
+        : "Porymap and mGBA are Windows programs and go here.";
 
     public ObservableCollection<InstallRowVm> Rows { get; } = [];
     public ObservableCollection<string> Distros { get; } = [];

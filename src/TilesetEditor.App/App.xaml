@@ -154,10 +154,10 @@
                 <Trigger Property="FontWeight" Value="SemiBold">
                     <Setter Property="Background" Value="White"/>
                     <Setter Property="BorderBrush" Value="White"/>
-                    <Setter Property="Foreground" Value="{StaticResource AccentDarkBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource AccentDarkBrush}"/>
                 </Trigger>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Foreground" Value="{StaticResource AccentDarkBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource AccentDarkBrush}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>

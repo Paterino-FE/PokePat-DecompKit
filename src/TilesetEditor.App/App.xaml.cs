@@ -1,3 +1,4 @@
+using TilesetEditor.App.Infrastructure;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
@@ -12,6 +13,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        Infrastructure.FindBar.Register();   // Ctrl+F / Ctrl+H in every multi-line text box
         DispatcherUnhandledException += OnUnhandled;
         AppDomain.CurrentDomain.UnhandledException += (_, a) => LogCrash("AppDomain", a.ExceptionObject as Exception);
         TaskScheduler.UnobservedTaskException += (_, a) => { LogCrash("Task", a.Exception); a.SetObserved(); };
@@ -21,7 +23,8 @@ public partial class App : Application
         int themeAt = Array.IndexOf(e.Args, "--theme");
         var theme = themeAt >= 0 && themeAt + 1 < e.Args.Length ? e.Args[themeAt + 1] : new Toolkit.ToolkitSettingsStore().Load().Theme;
         Infrastructure.ThemeManager.Initialize(Infrastructure.ThemeManager.Parse(theme));
-        var window = new MainWindow();
+        Infrastructure.Perf.Log("--- start", 1000);
+        var window = Infrastructure.Perf.Time("create main window (incl. opening the last project)", () => new MainWindow());
         MainWindow = window;
         int shotsAt = Array.IndexOf(e.Args, "--screenshots");
         string? shotsDir = shotsAt >= 0 && shotsAt + 1 < e.Args.Length ? e.Args[shotsAt + 1] : null;
@@ -34,7 +37,9 @@ public partial class App : Application
             window.ShowActivated = false;
             window.ShowInTaskbar = false;
         }
-        window.Show();
+        window.ContentRendered += (_, _) => Infrastructure.Perf.Log("first frame on screen", 1000);
+        Infrastructure.Perf.Time("show main window", window.Show);
+        if (shotsDir == null) Shell.TaskbarIcon.RefreshWhenIdle(window);
 
         // Optional command line (shortcuts, scripted smoke tests):
         //   TilesetEditor.exe [<project-folder>] [--import <png>]...
@@ -98,11 +103,20 @@ public partial class App : Application
         enc.Save(fs);
     }
 
+    private static bool _showingCrash;
+
     private static void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         LogCrash("Dispatcher", e.Exception);
-        MessageBox.Show($"Unexpected error:\n\n{e.Exception.Message}\n\n{e.Exception.GetType().Name}\n\nDetails: {CrashLogPath}",
-            "PokéPat DecompKit", MessageBoxButton.OK, MessageBoxImage.Error);
+        var text = $"Something went wrong, but PokéPat keeps running.\n\n{e.Exception.Message}\n\n{e.Exception.GetType().Name}\n\nDetails (for a bug report): {CrashLogPath}";
+        // A second error while the report is open (e.g. in drawing) gets the plain system box, so it cannot loop.
+        if (_showingCrash) MessageBox.Show(text, "PokéPat DecompKit – unexpected error", MessageBoxButton.OK, MessageBoxImage.Error);
+        else
+        {
+            _showingCrash = true;
+            try { AppDialog.Show(text, "Unexpected error", MessageBoxButton.OK, MessageBoxImage.Error); }
+            finally { _showingCrash = false; }
+        }
         e.Handled = true;
     }
 

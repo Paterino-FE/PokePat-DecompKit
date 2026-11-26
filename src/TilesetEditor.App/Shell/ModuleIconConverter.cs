@@ -20,6 +20,12 @@ public sealed class ModuleIconConverter : IValueConverter
         "Graphics" => "🖼",
         "Features" => "⚙",
         "Mods" => "🧩",
+        "Pokémon" => "🐾",
+        "Events & Dialogs" => "💬",
+        "Mugshots" => "🙂",
+        "Wild Pokémon" => "🌿",
+        "Backups" => "🕘",
+        "Shops" => "🛒",
         _ => "✦",
     };
 

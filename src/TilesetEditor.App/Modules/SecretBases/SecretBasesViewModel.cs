@@ -323,7 +323,7 @@ public sealed class SecretBasesViewModel : ObservableObject, IToolkitModule
         set
         {
             if (_selectedDecoration == value) return;
-            if (DecorationEdited && MessageBox.Show(Application.Current.MainWindow, $"Discard the unsaved changes of {_selectedDecoration?.Constant}?", "Decorations",
+            if (DecorationEdited && AppDialog.Show(Application.Current.MainWindow, $"Discard the unsaved changes of {_selectedDecoration?.Constant}?", "Decorations",
                     MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             {
                 // Keep the selection; the grid is told to re-read it.
@@ -471,7 +471,7 @@ public sealed class SecretBasesViewModel : ObservableObject, IToolkitModule
             ProjectWriter.Warn("New decoration", ex.Message);
             return;
         }
-        if (result.ColorChanges.Count > 0 && MessageBox.Show(Application.Current.MainWindow,
+        if (result.ColorChanges.Count > 0 && AppDialog.Show(Application.Current.MainWindow,
                 "These colors are not in the palette and will be replaced:\n\n" +
                 string.Join("\n", result.ColorChanges.Take(12).Select(c => $"  {c.From.ToHex()} → {c.To.ToHex()}")) + "\n\nContinue?",
                 "Confirm color loss", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;

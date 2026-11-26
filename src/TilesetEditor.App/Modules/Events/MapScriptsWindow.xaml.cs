@@ -1,3 +1,4 @@
+using TilesetEditor.App.Infrastructure;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -82,7 +83,7 @@ public partial class MapScriptsWindow : Window
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ProjectLoadException or FormatException)
         {
-            MessageBox.Show(this, $"The map could not be shown:\n{ex.Message}", "Show movements on map", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDialog.Show(this, $"The map could not be shown:\n{ex.Message}", "Show movements on map", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

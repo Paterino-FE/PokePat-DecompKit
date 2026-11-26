@@ -173,7 +173,7 @@ public sealed class TrainersViewModel : ObservableObject, IToolkitModule
         set
         {
             if (_selected == value) return;
-            if (_dirty && value != null && MessageBox.Show(Application.Current.MainWindow,
+            if (_dirty && value != null && AppDialog.Show(Application.Current.MainWindow,
                     $"Discard the unsaved changes to {Editing?.Id}?", "Trainers", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             {
                 OnPropertyChanged();
