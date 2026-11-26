@@ -33,6 +33,9 @@ public sealed partial class Installer
             case InstallComponent.Porytiles:
                 return new UpdateInfo(c, PorytilesSettings.PinnedVersion, null, false, false,
                     $"Stays at {PorytilesSettings.PinnedVersion} on purpose – PokéPat's tileset import was tested with exactly this version.");
+            case InstallComponent.Expansion when Options.Game == TilesetEditor.Core.Project.GameKind.Platinum:
+                return new UpdateInfo(c, null, null, false, false,
+                    "pokeplatinum has no releases – new work of the decompilation comes with git (git pull from pret/pokeplatinum, merged into your branch).");
             case InstallComponent.Expansion:
             {
                 var r = await Shell.RunAsync($"git -C {LinuxShell.Quote(ProjectLinuxPath!)} describe --tags --abbrev=0 --match 'expansion/*' 2>/dev/null", null, ct).ConfigureAwait(false);
@@ -47,6 +50,8 @@ public sealed partial class Installer
             case InstallComponent.Porymap:
                 return Compare(c, ProgramVersion(PorymapExe), await GitHubReleases.LatestAsync("huderlem/porymap", ct).ConfigureAwait(false), true);
             default:
+                if (string.Equals(Path.GetFileName(EmulatorExe), "melonDS.exe", StringComparison.OrdinalIgnoreCase))
+                    return Compare(c, ProgramVersion(EmulatorExe), await GitHubReleases.LatestAsync(MelonDsRepo, ct).ConfigureAwait(false), true);
                 if (!string.Equals(Path.GetFileName(EmulatorExe), "mGBA.exe", StringComparison.OrdinalIgnoreCase))
                     return new UpdateInfo(c, null, null, false, false, "Not mGBA – updates of this emulator are not checked.");
                 return Compare(c, ProgramVersion(EmulatorExe), await GitHubReleases.LatestAsync("mgba-emu/mgba", ct).ConfigureAwait(false), true);
@@ -92,6 +97,8 @@ public sealed partial class Installer
         {
             switch (c)
             {
+                case InstallComponent.Expansion when Options.Game == TilesetEditor.Core.Project.GameKind.Platinum:
+                    return await CheckAsync(c, ct).ConfigureAwait(false);
                 case InstallComponent.Expansion:
                     return await UpdateExpansionAsync(log, ct).ConfigureAwait(false);
                 case InstallComponent.Poryscript:
@@ -156,8 +163,8 @@ public sealed partial class Installer
     public static async Task<AppUpdate?> CheckAppUpdateAsync(string currentVersion, CancellationToken ct = default)
     {
         var rel = await GitHubReleases.LatestAsync(AppRepo, ct).ConfigureAwait(false);
-        if (rel == null || GitHubReleases.CompareVersions(currentVersion, rel.Tag) >= 0) return null;
-        return new AppUpdate(GitHubReleases.Short(rel.Tag), rel.PageUrl ?? $"https://github.com/{AppRepo}/releases/latest");
+        if (rel?.Version is not { } version || GitHubReleases.CompareVersions(currentVersion, version) >= 0) return null;
+        return new AppUpdate(version, rel.PageUrl ?? $"https://github.com/{AppRepo}/releases/latest");
     }
 
     /// <summary>All available updates of the current project and programs (for the check on start).</summary>

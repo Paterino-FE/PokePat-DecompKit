@@ -9,16 +9,21 @@ internal static class Install
 {
     public static async Task<int> RunAsync(ToolkitSettingsStore store, ToolkitSettings settings, Func<string, string?> opt, bool checkOnly)
     {
+        // --game emerald|platinum (default: the game chosen last, else Emerald).
+        var game = opt("game") is { } gameText
+            ? (Enum.TryParse<TilesetEditor.Core.Project.GameKind>(gameText, ignoreCase: true, out var g) ? g : throw new ArgumentException($"Unknown game \"{gameText}\" (emerald or platinum)."))
+            : InstallOptions.FromSettings(settings).Game;
         var options = new InstallOptions
         {
-            ProjectPath = opt("project-path") ?? "~/pokeemerald-expansion",
+            Game = game,
+            ProjectPath = opt("project-path") ?? TilesetEditor.Core.Project.GameKinds.DefaultProjectPath(game),
             ToolsFolder = opt("tools") ?? settings.ToolsFolder ?? InstallOptions.DefaultToolsFolder,
             ExpansionTag = opt("tag"),
             ExistingPorymap = settings.DefaultPorymapExe,
-            ExistingEmulator = settings.DefaultEmulatorExe,
+            ExistingEmulator = game == TilesetEditor.Core.Project.GameKind.Platinum ? settings.DefaultNdsEmulatorExe : settings.DefaultEmulatorExe,
         };
         if (opt("distro") is { } d) options.Distro = d;
-        if (opt("repo") is { } repo) options.ExpansionRepo = repo;
+        if (opt("repo") is { } repo) { if (game == TilesetEditor.Core.Project.GameKind.Platinum) options.PlatinumRepo = repo; else options.ExpansionRepo = repo; }
         if (opt("branch") is { } b) options.Branch = b;
         var installer = new Installer(options);
         var only = opt("only")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -30,7 +35,7 @@ internal static class Install
             // install --updates: list what is new;  install --update porymap,expansion: update those parts.
             var wanted = opt("update")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Select(s => Enum.Parse<InstallComponent>(s, ignoreCase: true)).ToHashSet();
-            var current = InstallOptions.FromSettings(settings);
+            var current = InstallOptions.FromSettings(settings, game);
             if (opt("project-path") == null) options.ProjectPath = current.ProjectPath;
             if (opt("distro") == null) options.Distro = current.Distro;
             options.ExistingPorymap = current.ExistingPorymap;
@@ -41,7 +46,7 @@ internal static class Install
             {
                 var u = await up.CheckUpdateAsync(c);
                 if (u == null) continue;
-                Console.WriteLine($"{(u.Available ? "⬆" : "✓")} {Installer.Title(c),-24} {u.Message}");
+                Console.WriteLine($"{(u.Available ? "⬆" : "✓")} {Installer.Title(c, game),-24} {u.Message}");
                 if (wanted?.Contains(c) == true && u.Available)
                 {
                     var s = await up.UpdateAsync(c, line => Console.WriteLine("   " + line));
@@ -64,10 +69,10 @@ internal static class Install
             var s = await installer.CheckAsync(c);
             if (!checkOnly && s.State is InstallState.Missing or InstallState.Failed)
             {
-                Console.WriteLine($"== {Installer.Title(c)}: {s.Message}");
+                Console.WriteLine($"== {Installer.Title(c, game)}: {s.Message}");
                 s = await installer.InstallAsync(c, line => Console.WriteLine("   " + line), newWindow: false);
             }
-            Console.WriteLine($"{Mark(s.State)} {Installer.Title(c),-24} {s.Message}");
+            Console.WriteLine($"{Mark(s.State)} {Installer.Title(c, game),-24} {s.Message}");
             if (s.State is not (InstallState.Ready or InstallState.NotAvailable))
             {
                 allReady = false;

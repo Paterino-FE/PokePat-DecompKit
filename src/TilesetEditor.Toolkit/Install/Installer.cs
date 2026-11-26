@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO.Compression;
 using TilesetEditor.Compiler;
+using TilesetEditor.Core.Project;
 
 namespace TilesetEditor.Toolkit.Install;
 
@@ -29,11 +30,16 @@ public sealed class InstallOptions
     /// <summary>Windows: everything Linux-side happens in this WSL distribution. Linux: directly.</summary>
     public bool UseWsl { get; set; } = OperatingSystem.IsWindows();
     public string Distro { get; set; } = "Ubuntu";
+    /// <summary>The game the project is based on: decides the repository, build tools and which parts are offered.</summary>
+    public GameKind Game { get; set; } = GameKind.Emerald;
     /// <summary>Linux path of the project ("~" allowed). Inside WSL the build is much faster than on C:\.</summary>
     public string ProjectPath { get; set; } = "~/pokeemerald-expansion";
     /// <summary>Folder for the Windows programs (Porymap, mGBA).</summary>
     public string ToolsFolder { get; set; } = DefaultToolsFolder;
     public string ExpansionRepo { get; set; } = "https://github.com/rh-hideout/pokeemerald-expansion";
+    public string PlatinumRepo { get; set; } = GameKind.Platinum.DefaultRepository();
+    /// <summary>The repository the project is cloned from.</summary>
+    public string Repository => Game == GameKind.Platinum ? PlatinumRepo : ExpansionRepo;
     /// <summary>null = the latest release.</summary>
     public string? ExpansionTag { get; set; }
     public string Branch { get; set; } = "pokepat";
@@ -41,23 +47,33 @@ public sealed class InstallOptions
     public string? ExistingPorymap { get; set; }
     public string? ExistingEmulator { get; set; }
 
-    /// <summary>Options for the current project of the settings (WSL distribution and Linux path when it lives in WSL).</summary>
-    public static InstallOptions FromSettings(ToolkitSettings s)
+    /// <summary>
+    /// Options for the current project of the settings (WSL distribution and Linux path when it lives in WSL). The game is
+    /// <paramref name="game"/>, else the one chosen last in "Get started", else the game of the last project.
+    /// </summary>
+    public static InstallOptions FromSettings(ToolkitSettings s, GameKind? game = null)
     {
+        var last = s.LastProject;
+        ProjectToolSettings? t = null;
+        if (last != null) s.Projects.TryGetValue(ToolkitSettings.ProjectKey(last), out t);
+        var lastGame = t?.Game != null ? GameKinds.Parse(t.Game) : (GameKind?)null;
+        var g = game ?? (s.PreferredGame != null ? GameKinds.Parse(s.PreferredGame) : lastGame ?? GameKind.Emerald);
         var o = new InstallOptions
         {
+            Game = g,
+            ProjectPath = g.DefaultProjectPath(),
             ToolsFolder = s.ToolsFolder ?? DefaultToolsFolder,
             ExistingPorymap = s.DefaultPorymapExe,
-            ExistingEmulator = s.DefaultEmulatorExe,
+            ExistingEmulator = g == GameKind.Platinum ? s.DefaultNdsEmulatorExe : s.DefaultEmulatorExe,
         };
-        var last = s.LastProject;
-        if (last != null && s.Projects.TryGetValue(ToolkitSettings.ProjectKey(last), out var t))
+        if (t != null)
         {
             o.Distro = t.BuildWslDistro;
             if (!string.IsNullOrWhiteSpace(t.PorymapExe)) o.ExistingPorymap = t.PorymapExe;
-            if (!string.IsNullOrWhiteSpace(t.EmulatorExe)) o.ExistingEmulator = t.EmulatorExe;
+            if (!string.IsNullOrWhiteSpace(t.EmulatorExe) && (lastGame ?? GameKind.Emerald) == g) o.ExistingEmulator = t.EmulatorExe;
         }
-        if (string.IsNullOrWhiteSpace(last)) return o;
+        // The last project's folder is only the default when it is a project of the same game.
+        if (string.IsNullOrWhiteSpace(last) || (lastGame ?? GameKind.Emerald) != g) return o;
         if (!o.UseWsl) { o.ProjectPath = last; return o; }
         var m = System.Text.RegularExpressions.Regex.Match(last, @"^[\\/]{2}(?:wsl\$|wsl\.localhost)[\\/]([^\\/]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         if (!m.Success) return o;
@@ -87,6 +103,8 @@ public sealed partial class Installer(InstallOptions options)
     public const string PorytilesSha256 = "68C904C3FF707ED2D6DE0372073F165E627EC3EE7855EEDBB3363184CC9212A4";
     public const string PoryscriptFallbackUrl = "https://github.com/huderlem/poryscript/releases/download/3.6.1/poryscript-linux.zip";
     public const string AptPackages = "build-essential binutils-arm-none-eabi gcc-arm-none-eabi libnewlib-arm-none-eabi libpng-dev git python3";
+    /// <summary>pokeplatinum's INSTALL.md (Ubuntu/WSL); meson and the compiler (metroskrew) are fetched by its Makefile.</summary>
+    public const string PlatinumAptPackages = "bison flex g++ gcc-arm-none-eabi git make ninja-build pkg-config python3 python3-venv p7zip wget xz-utils";
 
     public InstallOptions Options { get; } = options;
     public LinuxShell Shell { get; } = new(options.UseWsl, options.Distro);
@@ -101,31 +119,41 @@ public sealed partial class Installer(InstallOptions options)
 
     public static IReadOnlyList<InstallComponent> All { get; } = Enum.GetValues<InstallComponent>();
 
-    public static string Title(InstallComponent c) => c switch
+    public static string Title(InstallComponent c) => Title(c, GameKind.Emerald);
+
+    public static string Title(InstallComponent c, GameKind game) => c switch
     {
         InstallComponent.Wsl => "WSL with Ubuntu",
         InstallComponent.BuildTools => "Build tools",
-        InstallComponent.Expansion => "pokeemerald-expansion",
+        InstallComponent.Expansion => game.DecompName(),
         InstallComponent.Poryscript => "Poryscript",
         InstallComponent.Porytiles => "Porytiles " + PorytilesSettings.PinnedVersion,
         InstallComponent.Porymap => "Porymap",
-        _ => "Emulator (mGBA)",
+        _ => game == GameKind.Platinum ? "Emulator (melonDS)" : "Emulator (mGBA)",
     };
 
-    public static string Description(InstallComponent c) => c switch
+    public static string Description(InstallComponent c) => Description(c, GameKind.Emerald);
+
+    public static string Description(InstallComponent c, GameKind game) => (c, game) switch
     {
-        InstallComponent.Wsl => "Linux inside Windows – the game is built there.",
-        InstallComponent.BuildTools => "make, the GBA compiler (arm-none-eabi), libpng, git, python3. Asks for your Linux password once.",
-        InstallComponent.Expansion => "Your game: the latest pokeemerald-expansion release, on your own branch \"pokepat\".",
-        InstallComponent.Poryscript => "Script language for events and dialogs; added to the project's Makefile.",
-        InstallComponent.Porytiles => "Turns pictures into tilesets (Tilesets module).",
-        InstallComponent.Porymap => "Map editor; PokéPat opens it with your project and map.",
+        (InstallComponent.Wsl, _) => "Linux inside Windows – the game is built there.",
+        (InstallComponent.BuildTools, GameKind.Platinum) => "make, ninja, bison, flex, the ARM compiler, git, python3 (pokeplatinum's INSTALL.md). Asks for your Linux password once.",
+        (InstallComponent.BuildTools, _) => "make, the GBA compiler (arm-none-eabi), libpng, git, python3. Asks for your Linux password once.",
+        (InstallComponent.Expansion, GameKind.Platinum) => "Your game: pret/pokeplatinum (the Pokémon Platinum decompilation), on your own branch \"pokepat\".",
+        (InstallComponent.Expansion, _) => "Your game: the latest pokeemerald-expansion release, on your own branch \"pokepat\".",
+        (InstallComponent.Poryscript, GameKind.Platinum) or (InstallComponent.Porytiles, GameKind.Platinum) or (InstallComponent.Porymap, GameKind.Platinum) =>
+            "Only used for Pokémon Emerald projects.",
+        (InstallComponent.Poryscript, _) => "Script language for events and dialogs; added to the project's Makefile.",
+        (InstallComponent.Porytiles, _) => "Turns pictures into tilesets (Tilesets module).",
+        (InstallComponent.Porymap, _) => "Map editor; PokéPat opens it with your project and map.",
+        (_, GameKind.Platinum) => "Nintendo DS emulator: plays the ROM after \"Build ROM\".",
         _ => "Plays the ROM after \"Build ROM\".",
     };
 
     public bool Applies(InstallComponent c) => c switch
     {
         InstallComponent.Wsl => Options.UseWsl,
+        InstallComponent.Poryscript or InstallComponent.Porytiles or InstallComponent.Porymap when Options.Game == GameKind.Platinum => false,
         InstallComponent.Porymap or InstallComponent.Emulator => OperatingSystem.IsWindows(),
         _ => true,
     };
@@ -140,7 +168,9 @@ public sealed partial class Installer(InstallOptions options)
             return new ComponentStatus(InstallState.NotAvailable, c switch
             {
                 InstallComponent.Wsl => "Not needed – this is Linux.",
+                InstallComponent.Poryscript or InstallComponent.Porytiles or InstallComponent.Porymap when Options.Game == GameKind.Platinum => "Not needed for Pokémon Platinum.",
                 InstallComponent.Porymap => "Install Porymap yourself on this system (github.com/huderlem/porymap).",
+                _ when Options.Game == GameKind.Platinum => "Install melonDS with your package manager or from melonds.kuribo64.net.",
                 _ => "Install mGBA with your package manager (e.g. mgba-qt).",
             });
         try
@@ -208,7 +238,13 @@ public sealed partial class Installer(InstallOptions options)
 
     private async Task<ComponentStatus> CheckBuildToolsAsync(CancellationToken ct)
     {
-        const string script = """
+        const string platinum = """
+            m=""
+            for c in make gcc g++ git python3 ninja pkg-config bison flex arm-none-eabi-gcc; do command -v "$c" >/dev/null 2>&1 || m="$m $c"; done
+            python3 -c "import venv" >/dev/null 2>&1 || m="$m python3-venv"
+            echo "MISSING:$m"
+            """;
+        const string emerald = """
             m=""
             for c in make gcc g++ git python3 arm-none-eabi-gcc arm-none-eabi-as; do command -v "$c" >/dev/null 2>&1 || m="$m $c"; done
             [ -e /usr/include/png.h ] || m="$m libpng-dev"
@@ -217,7 +253,7 @@ public sealed partial class Installer(InstallOptions options)
             fi
             echo "MISSING:$m"
             """;
-        var r = await Shell.RunAsync(script, null, ct).ConfigureAwait(false);
+        var r = await Shell.RunAsync(Options.Game == GameKind.Platinum ? platinum : emerald, null, ct).ConfigureAwait(false);
         var line = r.Output.Split('\n').Select(l => l.Trim()).LastOrDefault(l => l.StartsWith("MISSING:", StringComparison.Ordinal));
         if (line == null) return new ComponentStatus(InstallState.Failed, "Could not check: " + Last(r.Output));
         var missing = line["MISSING:".Length..].Trim();
@@ -242,7 +278,9 @@ public sealed partial class Installer(InstallOptions options)
         var q = LinuxShell.Quote(p);
         var script = $$"""
             p={{q}}
-            if [ -f "$p/Makefile" ] && [ -f "$p/include/constants/flags.h" ]; then
+            if {{(Options.Game == GameKind.Platinum
+                ? "[ -f \"$p/meson.build\" ] && [ -d \"$p/platinum.us\" ] && [ -d \"$p/res/pokemon\" ]"
+                : "[ -f \"$p/Makefile\" ] && [ -f \"$p/include/constants/flags.h\" ]")}}; then
               echo "STATE:READY"
               echo "VERSION:$(git -C "$p" describe --tags --always 2>/dev/null)"
               echo "BRANCH:$(git -C "$p" branch --show-current 2>/dev/null)"
@@ -255,7 +293,7 @@ public sealed partial class Installer(InstallOptions options)
         {
             "READY" => new ComponentStatus(InstallState.Ready, $"Ready: {p}" +
                 (Value("VERSION").Length > 0 ? $" ({Value("VERSION")}" + (Value("BRANCH").Length > 0 ? $", branch {Value("BRANCH")})" : ")") : "")),
-            "NOTEMPTY" => new ComponentStatus(InstallState.Failed, $"{p} exists but is not a pokeemerald project – choose an empty or new folder."),
+            "NOTEMPTY" => new ComponentStatus(InstallState.Failed, $"{p} exists but is not a {Options.Game.DecompName()} project – choose an empty or new folder."),
             "MISSING" => new ComponentStatus(InstallState.Missing, $"Will be downloaded to {p}."),
             _ => new ComponentStatus(InstallState.Failed, "Could not check: " + Last(r.Output)),
         };
@@ -299,6 +337,16 @@ public sealed partial class Installer(InstallOptions options)
 
     private ComponentStatus CheckEmulator()
     {
+        if (Options.Game == GameKind.Platinum)
+        {
+            foreach (var exe in new[] { Options.ExistingEmulator, Path.Combine(HostTools("melonds"), "melonDS.exe") })
+                if (!string.IsNullOrWhiteSpace(exe) && File.Exists(exe) && !exe.EndsWith("mGBA.exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    EmulatorExe = exe;
+                    return new ComponentStatus(InstallState.Ready, "Ready: " + exe);
+                }
+            return new ComponentStatus(InstallState.Missing, $"Will be installed to {HostTools("melonds")}.");
+        }
         foreach (var exe in new[] { Options.ExistingEmulator, Path.Combine(HostTools("mgba"), "mGBA.exe") })
             if (!string.IsNullOrWhiteSpace(exe) && File.Exists(exe))
             {
@@ -383,11 +431,11 @@ public sealed partial class Installer(InstallOptions options)
         var script = $"""
             echo '== PokePat DecompKit: installing the build tools =='
             if ! command -v apt-get >/dev/null 2>&1; then
-              echo 'This Linux has no apt-get. Install with your package manager: make, gcc, arm-none-eabi-gcc + newlib, libpng (dev), git, python3.'
+              echo 'This Linux has no apt-get. Install with your package manager: {(Options.Game == GameKind.Platinum ? "make, g++, ninja, pkg-config, bison, flex, arm-none-eabi-gcc, git, python3" : "make, gcc, arm-none-eabi-gcc + newlib, libpng (dev), git, python3")}.'
               {pause}; exit 2
             fi
             echo 'Enter your Linux password if asked (nothing is shown while typing).'
-            if sudo apt-get update && sudo apt-get install -y {AptPackages}; then
+            if sudo apt-get update && sudo apt-get install -y {(Options.Game == GameKind.Platinum ? PlatinumAptPackages : AptPackages)}; then
               echo; echo 'Done – you can go back to PokePat.'; sleep 2
             else
               echo; echo 'The installation failed – see the messages above.'; {pause}; exit 1
@@ -403,8 +451,8 @@ public sealed partial class Installer(InstallOptions options)
     {
         var state = await CheckExpansionAsync(ct).ConfigureAwait(false);
         if (state.State != InstallState.Missing) return state;
-        var tag = Options.ExpansionTag;
-        if (tag == null && Options.ExpansionRepo.Contains("github.com/rh-hideout/pokeemerald-expansion", StringComparison.OrdinalIgnoreCase))
+        var tag = Options.Game == GameKind.Platinum ? null : Options.ExpansionTag;
+        if (tag == null && Options.Game == GameKind.Emerald && Options.ExpansionRepo.Contains("github.com/rh-hideout/pokeemerald-expansion", StringComparison.OrdinalIgnoreCase))
         {
             log("Looking up the latest pokeemerald-expansion release …");
             tag = (await GitHubReleases.LatestAsync("rh-hideout/pokeemerald-expansion", ct).ConfigureAwait(false))?.Tag;
@@ -415,12 +463,12 @@ public sealed partial class Installer(InstallOptions options)
             set -e
             command -v git >/dev/null 2>&1 || {"{"} echo 'git is missing – install the build tools first.'; exit 3; {"}"}
             mkdir -p "$(dirname {p})"
-            git -c advice.detachedHead=false clone --progress --filter=blob:none {(tag != null ? "--branch " + LinuxShell.Quote(tag) + " " : "")}{LinuxShell.Quote(Options.ExpansionRepo)} {p}
+            git -c advice.detachedHead=false clone --progress --filter=blob:none {(tag != null ? "--branch " + LinuxShell.Quote(tag) + " " : "")}{LinuxShell.Quote(Options.Repository)} {p}
             cd {p}
             git switch -c {LinuxShell.Quote(Options.Branch)}
             echo "Project ready on branch {Options.Branch.Replace("\"", "")}."
             """;
-        log($"Downloading pokeemerald-expansion to {ProjectLinuxPath} (a few hundred MB, takes a few minutes) …");
+        log($"Downloading {Options.Game.DecompName()} to {ProjectLinuxPath} (a few hundred MB, takes a few minutes) …");
         var r = await Shell.RunAsync(script, log, ct).ConfigureAwait(false);
         return r.Ok ? null : new ComponentStatus(InstallState.Failed, "git clone failed: " + Last(r.Output));
     }
@@ -541,6 +589,7 @@ public sealed partial class Installer(InstallOptions options)
 
     private async Task<ComponentStatus?> InstallEmulatorAsync(Action<string> log, CancellationToken ct)
     {
+        if (Options.Game == GameKind.Platinum) return await InstallMelonDsAsync(log, ct).ConfigureAwait(false);
         var rel = await GitHubReleases.LatestAsync("mgba-emu/mgba", ct).ConfigureAwait(false)
                   ?? throw new HttpRequestException("GitHub could not be reached.");
         var asset = rel.Assets.FirstOrDefault(a => a.Name.EndsWith("-win64.7z", StringComparison.OrdinalIgnoreCase))
@@ -574,6 +623,38 @@ public sealed partial class Installer(InstallOptions options)
         return null;
     }
 
+    /// <summary>melonDS (Nintendo DS emulator) for Platinum projects: the latest Windows release from GitHub.</summary>
+    private async Task<ComponentStatus?> InstallMelonDsAsync(Action<string> log, CancellationToken ct)
+    {
+        var rel = await GitHubReleases.LatestAsync(MelonDsRepo, ct).ConfigureAwait(false)
+                  ?? throw new HttpRequestException("GitHub could not be reached.");
+        var asset = rel.Assets
+                        .Where(a => a.Name.Contains("win", StringComparison.OrdinalIgnoreCase) && a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                        .OrderByDescending(a => a.Name.Contains("x86_64", StringComparison.OrdinalIgnoreCase) || a.Name.Contains("x64", StringComparison.OrdinalIgnoreCase))
+                        .FirstOrDefault()
+                    ?? throw new InvalidDataException($"melonDS {rel.Tag} has no Windows download.");
+        log($"Downloading melonDS {rel.Tag} …");
+        var zip = TempFile(asset.Name);
+        try
+        {
+            await GitHubReleases.DownloadAsync(asset.Url, zip, log, ct).ConfigureAwait(false);
+            var unpacked = Path.Combine(Path.GetDirectoryName(zip)!, "out");
+            Extract(zip, "", unpacked);
+            var exe = Directory.EnumerateFiles(unpacked, "melonDS.exe", SearchOption.AllDirectories).FirstOrDefault()
+                      ?? throw new InvalidDataException("melonDS.exe is not in the download.");
+            var target = HostTools("melonds");
+            CopyDirectory(Path.GetDirectoryName(exe)!, target);
+            await File.WriteAllTextAsync(Path.Combine(target, VersionMarker), rel.Tag, ct).ConfigureAwait(false);
+            Options.ExistingEmulator = Path.Combine(target, "melonDS.exe");
+            log($"  Installed to {target}");
+            log("  melonDS needs the Nintendo DS BIOS/firmware files only for some features; pokeplatinum ROMs start without them (Config → Emu settings → DS-mode: no BIOS).");
+        }
+        finally { DeleteTemp(zip); }
+        return null;
+    }
+
+    public const string MelonDsRepo = "melonDS-emu/melonDS";
+
     private static void CopyDirectory(string from, string to)
     {
         Directory.CreateDirectory(to);
@@ -594,13 +675,22 @@ public sealed partial class Installer(InstallOptions options)
         tools.BuildWslDistro = Options.Distro;
         if (PorymapExe != null) tools.PorymapExe = PorymapExe;
         if (EmulatorExe != null) tools.EmulatorExe = EmulatorExe;
-        if (PorytilesReady)
+        tools.Game = Options.Game.ToString();
+        if (Options.Game == GameKind.Platinum && tools.BuildCommand == ProjectToolSettings.DefaultBuildCommand) tools.BuildCommand = ProjectToolSettings.PlatinumBuildCommand;
+        if (Options.Game == GameKind.Platinum && tools.RomPath == null) tools.RomPath = GameKind.Platinum.DefaultRomPath();
+        if (PorytilesReady && Options.Game == GameKind.Emerald)
         {
             tools.Porytiles.Mode = Options.UseWsl ? PorytilesMode.Wsl : PorytilesMode.Native;
             tools.Porytiles.WslDistro = Options.Distro;
             tools.Porytiles.Executable = PorytilesSettings.DefaultWslExecutable;
         }
         settings.ToolsFolder = Options.ToolsFolder;
+        settings.PreferredGame = Options.Game.ToString();
+        if (EmulatorExe != null)
+        {
+            if (Options.Game == GameKind.Platinum) settings.DefaultNdsEmulatorExe = EmulatorExe;
+            else settings.DefaultEmulatorExe = EmulatorExe;
+        }
         ToolSetup.Apply(settings, root, tools);
     }
 }

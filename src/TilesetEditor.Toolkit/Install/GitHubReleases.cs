@@ -4,8 +4,20 @@ using System.Text.Json;
 
 namespace TilesetEditor.Toolkit.Install;
 
-public sealed record ReleaseAsset(string Name, string Url, long Size);
-public sealed record Release(string Tag, IReadOnlyList<ReleaseAsset> Assets, string? PageUrl = null);
+/// <param name="Digest">GitHub's checksum of the file ("sha256:…"), if the release has one.</param>
+public sealed record ReleaseAsset(string Name, string Url, long Size, string? Digest = null);
+/// <param name="Notes">The release text (markdown) – what is new.</param>
+public sealed record Release(string Tag, IReadOnlyList<ReleaseAsset> Assets, string? PageUrl = null, string? Notes = null, string? Name = null)
+{
+    /// <summary>
+    /// The version of the release: from the tag ("v0.3.0"), else the title ("PokéPat-DecompKit Version 0.3.0"), else the
+    /// package name ("…-0.3.0-windows-x64.zip") – releases are not always tagged with their number.
+    /// </summary>
+    public string? Version =>
+        new[] { Tag, Name }.Concat(Assets.Select(a => a.Name))
+            .Select(t => System.Text.RegularExpressions.Regex.Match(t ?? "", @"\d+\.\d+(?:\.\d+)*"))
+            .FirstOrDefault(m => m.Success)?.Value;
+}
 
 /// <summary>Latest releases and downloads from GitHub (anonymous; a generic User-Agent, nothing about the user is sent).</summary>
 public static class GitHubReleases
@@ -34,9 +46,12 @@ public static class GitHubReleases
             if (string.IsNullOrEmpty(tag)) return null;
             var assets = root.TryGetProperty("assets", out var a) && a.ValueKind == JsonValueKind.Array
                 ? a.EnumerateArray().Select(x => new ReleaseAsset(x.GetProperty("name").GetString() ?? "",
-                    x.GetProperty("browser_download_url").GetString() ?? "", x.TryGetProperty("size", out var s) ? s.GetInt64() : 0)).ToList()
+                    x.GetProperty("browser_download_url").GetString() ?? "", x.TryGetProperty("size", out var s) ? s.GetInt64() : 0,
+                    x.TryGetProperty("digest", out var dg) && dg.ValueKind == JsonValueKind.String ? dg.GetString() : null)).ToList()
                 : [];
-            return new Release(tag, assets, root.TryGetProperty("html_url", out var h) ? h.GetString() : null);
+            return new Release(tag, assets, root.TryGetProperty("html_url", out var h) ? h.GetString() : null,
+                root.TryGetProperty("body", out var b) && b.ValueKind == JsonValueKind.String ? b.GetString() : null,
+                root.TryGetProperty("name", out var nm) && nm.ValueKind == JsonValueKind.String ? nm.GetString() : null);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or InvalidOperationException)
         {

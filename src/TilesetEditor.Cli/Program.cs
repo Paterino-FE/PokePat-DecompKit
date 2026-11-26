@@ -18,7 +18,9 @@ Console.OutputEncoding = System.Text.Encoding.UTF8;
 if (args.Length == 0 || args[0] is "-h" or "--help")
 {
     Console.WriteLine("PokéPat DecompKit command line");
-    Console.WriteLine("  install [--check]           get started: download and set up WSL tools, pokeemerald-expansion, Poryscript, Porytiles, Porymap, mGBA");
+    Console.WriteLine("  install [--check] [--game emerald|platinum]");
+    Console.WriteLine("                              get started: Emerald = WSL tools, pokeemerald-expansion, Poryscript, Porytiles, Porymap, mGBA;");
+    Console.WriteLine("                              Platinum = WSL tools, pret/pokeplatinum, melonDS");
     Console.WriteLine("  setup                       first-time setup: project folder (required) and tool paths (optional)");
     Console.WriteLine("  info | build | events | flags | gamedata | trainer | trainer-pic | sprite-import | tileset-import | mods | mod-install | mod-uninstall | portrait-add | render-dialog | compile | export");
     Console.WriteLine("All commands use the project from \"setup\"; --project <folder> overrides it. Details: README.md.");
@@ -33,7 +35,7 @@ var store = new ToolkitSettingsStore();
 var toolkitSettings = store.Load();
 if (cmd == "install")
 {
-    // install [--check] [--project-path ~/pokeemerald-expansion] [--tools <folder>] [--distro Ubuntu] [--only buildtools,porytiles] [--tag expansion/1.17.2]
+    // install [--check] [--game emerald|platinum] [--project-path ~/pokeemerald-expansion] [--tools <folder>] [--distro Ubuntu] [--only buildtools,porytiles] [--tag expansion/1.17.2]
     try { return await Install.RunAsync(store, toolkitSettings, Opt, opts.ContainsKey("check")); }
     catch (ArgumentException ex) { Console.Error.WriteLine("Error: " + ex.Message); return 1; }
 }
@@ -48,6 +50,16 @@ try
     var root = Opt("project") ?? toolkitSettings.LastProject
                ?? throw new ArgumentException("No project yet: run \"setup\" first (or pass --project <folder>).");
     var saved = toolkitSettings.ForProject(root);
+    if (TilesetEditor.Core.Project.GameDetector.Detect(Path.GetFullPath(root)) == TilesetEditor.Core.Project.GameKind.Platinum)
+    {
+        // pokeplatinum: facts and mods (the other commands are for pokeemerald-expansion).
+        var pl = TilesetEditor.Core.Platinum.PlatinumProject.Load(Path.GetFullPath(root));
+        Console.WriteLine($"Project: {pl.Root} (Pokémon Platinum, pokeplatinum)");
+        Console.WriteLine($"  {pl.Species.Count} Pokémon, {pl.Moves.Count} moves, {pl.Items.Count} items, {pl.TrainerCount} trainers, {pl.MapHeaders.Count} map headers");
+        if (cmd == "info") return 0;
+        if (cmd is "mods" or "mod-install" or "mod-uninstall") return RunMods(pl.Root, null, TilesetEditor.Core.Project.GameKind.Platinum);
+        throw new ArgumentException($"\"{cmd}\" is only available for pokeemerald-expansion projects; for Platinum use the app or: info, mods, mod-install, mod-uninstall.");
+    }
     var project = ProjectLoader.Load(Path.GetFullPath(root));
     PrintProject(project);
     if (cmd == "info") return 0;
@@ -260,47 +272,7 @@ try
         return spriteApplied.Success ? 0 : 3;
     }
 
-    if (cmd is "mods" or "mod-install" or "mod-uninstall")
-    {
-        // mods                       list the mods (repository mods/ folder, next to the program, Documents/PokePat Mods)
-        // mod-install --id <id> [--yes] / mod-uninstall --id <id> [--yes]
-        var folders = new List<string> { Path.Combine(AppContext.BaseDirectory, "mods"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "PokePat Mods") };
-        for (var dd = new DirectoryInfo(AppContext.BaseDirectory); dd != null; dd = dd.Parent)
-            if (File.Exists(Path.Combine(dd.FullName, "TilesetEditor.sln"))) { folders.Add(Path.Combine(dd.FullName, "mods")); break; }
-        if (Opt("mods") is { } extra) folders.Insert(0, extra);
-        var (mods, modProblems) = TilesetEditor.Export.Mods.ModPackage.LoadAll(folders);
-        var installedMods = TilesetEditor.Export.Mods.ModRegistry.Installed(project.Root);
-        if (cmd == "mods")
-        {
-            foreach (var m in mods)
-            {
-                var check = TilesetEditor.Export.Mods.ModPlanner.Check(project.Root, m, project.ExpansionVersion);
-                Console.WriteLine($"  {m.Manifest.Id,-24} {m.Manifest.Version,-8} {(check.Installed != null ? "installed" : check.CanInstall ? "available" : "does not fit")}  {m.Manifest.Name}");
-                foreach (var pr in check.Problems) Console.WriteLine($"      ! {pr}");
-            }
-            foreach (var pr in modProblems) Console.WriteLine("  ! " + pr);
-            return 0;
-        }
-        var id = Opt("id") ?? throw new ArgumentException("--id is missing.");
-        ExportPlan modPlan;
-        if (cmd == "mod-install")
-        {
-            var pkg = mods.FirstOrDefault(m => m.Manifest.Id == id) ?? throw new ArgumentException($"Mod {id} not found.");
-            modPlan = TilesetEditor.Export.Mods.ModPlanner.PlanInstall(project.Root, pkg, project.ExpansionVersion);
-        }
-        else
-        {
-            var inst = installedMods.FirstOrDefault(m => m.Id == id) ?? throw new ArgumentException($"Mod {id} is not installed.");
-            modPlan = TilesetEditor.Export.Mods.ModPlanner.PlanUninstall(project.Root, inst).Plan;
-        }
-        foreach (var pf in modPlan.Files) Console.WriteLine($"  {pf.ActionText,-7} {pf.RelativePath,-50} {pf.Description}");
-        foreach (var n in modPlan.Notes) Console.WriteLine("  * " + n);
-        if (!opts.ContainsKey("yes")) return 0;
-        var mr = new ExportApplier().Apply(modPlan);
-        Console.WriteLine(mr.Success ? "Written." : "Error: " + mr.Error);
-        return mr.Success ? 0 : 3;
-    }
+    if (cmd is "mods" or "mod-install" or "mod-uninstall") return RunMods(project.Root, project.ExpansionVersion, TilesetEditor.Core.Project.GameKind.Emerald);
 
     if (cmd == "portrait-add")
     {
@@ -519,4 +491,47 @@ static void PrintIssues(string title, IReadOnlyList<Issue> issues, Artwork art)
     Console.WriteLine($"{title}: {issues.Count} message(s)");
     foreach (var i in issues.Take(40))
         Console.WriteLine($"  [{i.SeverityText}] {(i.Location != null ? i.Location.Describe(art) + ": " : "")}{i.Message}");
+}
+
+// Mods of one game: list, install, uninstall (also for pokeplatinum projects).
+int RunMods(string projRoot, string? expansion, TilesetEditor.Core.Project.GameKind game)
+{
+    // mods                       list the mods (repository mods/ folder, next to the program, Documents/PokePat Mods)
+    // mod-install --id <id> [--yes] / mod-uninstall --id <id> [--yes]
+    var folders = new List<string> { Path.Combine(AppContext.BaseDirectory, "mods"),
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "PokePat Mods") };
+    for (var dd = new DirectoryInfo(AppContext.BaseDirectory); dd != null; dd = dd.Parent)
+        if (File.Exists(Path.Combine(dd.FullName, "TilesetEditor.sln"))) { folders.Add(Path.Combine(dd.FullName, "mods")); break; }
+    if (Opt("mods") is { } extra) folders.Insert(0, extra);
+    var (mods, modProblems) = TilesetEditor.Export.Mods.ModPackage.LoadAll(folders);
+    var installedMods = TilesetEditor.Export.Mods.ModRegistry.Installed(projRoot);
+    if (cmd == "mods")
+    {
+        foreach (var m in mods.Where(m => m.Manifest.GameKind == game))
+        {
+            var check = TilesetEditor.Export.Mods.ModPlanner.Check(projRoot, m, expansion);
+            Console.WriteLine($"  {m.Manifest.Id,-24} {m.Manifest.Version,-8} {(check.Installed != null ? "installed" : check.CanInstall ? "available" : "does not fit")}  {m.Manifest.Name}");
+            foreach (var pr in check.Problems) Console.WriteLine($"      ! {pr}");
+        }
+        foreach (var pr in modProblems) Console.WriteLine("  ! " + pr);
+        return 0;
+    }
+    var id = Opt("id") ?? throw new ArgumentException("--id is missing.");
+    ExportPlan modPlan;
+    if (cmd == "mod-install")
+    {
+        var pkg = mods.FirstOrDefault(m => m.Manifest.Id == id) ?? throw new ArgumentException($"Mod {id} not found.");
+        modPlan = TilesetEditor.Export.Mods.ModPlanner.PlanInstall(projRoot, pkg, expansion);
+    }
+    else
+    {
+        var inst = installedMods.FirstOrDefault(m => m.Id == id) ?? throw new ArgumentException($"Mod {id} is not installed.");
+        modPlan = TilesetEditor.Export.Mods.ModPlanner.PlanUninstall(projRoot, inst).Plan;
+    }
+    foreach (var pf in modPlan.Files) Console.WriteLine($"  {pf.ActionText,-7} {pf.RelativePath,-50} {pf.Description}");
+    foreach (var n in modPlan.Notes) Console.WriteLine("  * " + n);
+    if (!opts.ContainsKey("yes")) return 0;
+    var mr = new ExportApplier().Apply(modPlan);
+    Console.WriteLine(mr.Success ? "Written." : "Error: " + mr.Error);
+    return mr.Success ? 0 : 3;
 }

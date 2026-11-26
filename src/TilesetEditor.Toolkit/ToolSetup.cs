@@ -15,12 +15,26 @@ public static class ToolSetup
     /// <summary>Checks that the folder is a pokeemerald(-expansion) project the toolkit can read.</summary>
     public static SetupCheck CheckProject(string? path)
     {
-        if (string.IsNullOrWhiteSpace(path)) return new SetupCheck(false, "Required: choose the folder of your pokeemerald-expansion project.");
+        if (string.IsNullOrWhiteSpace(path)) return new SetupCheck(false, "Required: choose the folder of your pokeemerald-expansion or pokeplatinum project.");
         path = path.Trim().Trim('"');
         if (!Directory.Exists(path)) return new SetupCheck(false, "Folder not found.");
+        if (GameDetector.Detect(path) == GameKind.Platinum)
+        {
+            try
+            {
+                var pl = TilesetEditor.Core.Platinum.PlatinumProject.Load(Path.GetFullPath(path));
+                var penv = ProjectEnvironment.Detect(pl.Root);
+                return new SetupCheck(true, $"OK – Pokémon Platinum (pokeplatinum), {pl.Species.Count} Pokémon, {pl.MapHeaders.Count} maps" +
+                    (penv.GitBranch != null ? $", branch {penv.GitBranch}" : ""));
+            }
+            catch (Exception ex) when (ex is ProjectLoadException or IOException or UnauthorizedAccessException)
+            {
+                return new SetupCheck(false, "The project could not be read: " + ex.Message);
+            }
+        }
         string[] needed = ["Makefile", Path.Combine("include", "constants", "flags.h"), Path.Combine("data", "maps")];
         var missing = needed.Where(n => !File.Exists(Path.Combine(path, n)) && !Directory.Exists(Path.Combine(path, n))).ToList();
-        if (missing.Count > 0) return new SetupCheck(false, "This does not look like a pokeemerald project (missing: " + string.Join(", ", missing) + ").");
+        if (missing.Count > 0) return new SetupCheck(false, "This does not look like a pokeemerald or pokeplatinum project (missing: " + string.Join(", ", missing) + ").");
         try
         {
             var info = ProjectLoader.Load(Path.GetFullPath(path));
