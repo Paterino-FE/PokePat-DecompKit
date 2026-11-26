@@ -356,6 +356,10 @@ und zeigt die Ausgabe live. Regeln:
   (Skript an der Zeile, Text mit ausgewählter ID), sonst öffnet 📄 die Datei an der Zeile (VS Code, falls installiert, sonst
   das Standardprogramm).
 - *Im Emulator öffnen* ist nur nach einem erfolgreichen Build und mit eingetragenem Emulator aktiv.
+- Nach jedem erfolgreichen Build kopiert PokéPat das ROM in den Ordner `ROM` neben PokéPat (z. B. `ROM\pokeplatinum.nds`,
+  benannt nach dem Projektordner) und ersetzt es beim nächsten Build. Emulator und „ROM anzeigen“ nutzen diese Kopie
+  (startet schneller als die Datei in WSL). Ist das ROM gerade im Emulator geöffnet, meldet die Statuszeile, dass es nicht
+  ersetzt werden konnte.
 
 ## Kommandozeile (gleiche Bibliotheken, z. B. für Automatisierung)
 

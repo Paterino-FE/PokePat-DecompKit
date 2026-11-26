@@ -23,7 +23,7 @@ every change shows the list of files first, makes a backup and is rolled back co
 | **Sprites** | Overworld sprites (new, with own palettes), player character images, trainer pictures |
 | **Graphics** | Title screen, menus, windows, battle backgrounds … view and replace |
 | **Features** | `include/config` options by category |
-| **Build ROM** | Runs `make` (in WSL on Windows), shows the output and a clickable list of build problems (file:line), opens the emulator |
+| **Build ROM** | Runs `make` (in WSL on Windows), shows the output and a clickable list of build problems (file:line), copies the ROM to the ROM folder next to PokéPat (replaced by every build), opens the emulator |
 | **Mods** | Installs extensions into your game (checked first, shown as a file list, removable again) – e.g. *Dialog portraits* |
 
 Each game has its own look: green for Emerald, purple and silver for Platinum, with the game's mascot (Rayquaza / Giratina,

@@ -69,7 +69,7 @@ public sealed class ShellViewModel : ObservableObject
         OpenInEmulatorCommand = new RelayCommand(OpenInEmulator, () => CanOpenInEmulator);
         ShowRomInExplorerCommand = new RelayCommand(() =>
         {
-            if (ConfirmedRomPath != null) Process.Start("explorer.exe", $"/select,\"{ConfirmedRomPath}\"");
+            if (ConfirmedRomPath != null) Process.Start("explorer.exe", $"/select,\"{(RomCopyPath is { } copy && File.Exists(copy) ? copy : ConfirmedRomPath)}\"");
         }, () => ConfirmedRomPath != null);
         ToggleThemeCommand = new RelayCommand(() =>
         {
@@ -460,6 +460,15 @@ public sealed class ShellViewModel : ObservableObject
             ConfirmedRomPath = result.Success ? result.ConfirmedRomPath : null;
             var sb = new StringBuilder(result.Message);
             sb.Append($"  ({result.Duration.TotalSeconds:0}s)");
+            // A copy next to PokéPat (ROM folder), replaced by every build – the emulator opens this one.
+            RomCopyPath = null;
+            if (result.Success && result.ConfirmedRomPath is { } rom)
+            {
+                var (copy, error) = await Task.Run(() => BuiltRomCopy.Copy(rom, Context.Root!, AppContext.BaseDirectory));
+                RomCopyPath = copy;
+                sb.Append(copy != null ? $"  · copied to {copy}" : "  · " + error);
+                if (copy != null) AppendOutput("ROM copied to " + copy);
+            }
             if (!result.Success && !result.Cancelled) ListProblems();
             if (!result.Success && result.ErrorLines.Count > 0)
                 AppendOutput("\n=== Error lines ===\n" + string.Join("\n", result.ErrorLines.TakeLast(15)));
@@ -590,10 +599,13 @@ public sealed class ShellViewModel : ObservableObject
         if (r != null) BuildStatus = r;
     }
 
+    /// <summary>The copy of the last built ROM next to PokéPat (ROM folder), or null.</summary>
+    public string? RomCopyPath { get; private set; }
+
     private void OpenInEmulator()
     {
         if (ConfirmedRomPath == null) return;
-        var r = EmulatorLauncher.Launch(Context.Tools.EmulatorExe, ConfirmedRomPath);
+        var r = EmulatorLauncher.Launch(Context.Tools.EmulatorExe, RomCopyPath is { } copy && File.Exists(copy) ? copy : ConfirmedRomPath);
         if (!r.Started) AppDialog.Show(Application.Current.MainWindow, r.Message, "Emulator", MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 }

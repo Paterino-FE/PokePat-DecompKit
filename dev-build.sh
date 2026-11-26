@@ -86,13 +86,14 @@ if command -v cmd.exe >/dev/null 2>&1; then
 fi
 
 # More places for the test build, one folder per line in .devbuild-targets (local, not committed), e.g. /mnt/d/PokePat
-# for D:\PokePat. The folder gets exactly the files of the build (others in it are removed).
+# for D:\PokePat. The folder gets exactly the files of the build (others in it are removed, except the ROM folder).
 if [ -f "$root/.devbuild-targets" ]; then
   while IFS= read -r target || [ -n "$target" ]; do
     target="${target%%#*}"; target="$(echo "$target" | xargs)"
     [ -z "$target" ] && continue
     case "$target" in /|/mnt|/mnt/?|/home|"$HOME") echo "Skipping unsafe target $target" >&2; continue;; esac
-    mkdir -p "$target" && rsync -a --delete "$win/" "$target/" && echo "Copy: $target/PokePatDecompKit.exe"
+    # ROM (built ROMs) and .update-backup belong to the user / the updater and stay.
+    mkdir -p "$target" && rsync -a --delete --exclude /ROM/ --exclude /.update-backup/ "$win/" "$target/" && echo "Copy: $target/PokePatDecompKit.exe"
   done < "$root/.devbuild-targets"
 fi
 
