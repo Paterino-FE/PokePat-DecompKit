@@ -41,8 +41,8 @@ public class ModTests
         var install = ModPlanner.PlanInstall(root, mod, "1.17.2");
         Assert.True(new ExportApplier(backupRoot: TestPaths.NewTempDir("backup")).Apply(install).Success);
         Assert.True(DialogPortraits.IsInstalled(root));
-        Assert.Contains("    HidePortrait();\n", File.ReadAllText(Path.Combine(root, "src", "field_message_box.c")).Replace("\r\n", "\n"));
-        Assert.EndsWith("\tdef_special ShowPortrait\n\tdef_special HidePortrait\n", File.ReadAllText(Path.Combine(root, "data", "specials.inc")).Replace("\r\n", "\n"));
+        Assert.Contains("    HidePortrait();\n    HidePicture();\n", File.ReadAllText(Path.Combine(root, "src", "field_message_box.c")).Replace("\r\n", "\n"));
+        Assert.EndsWith("\tdef_special ShowPortrait\n\tdef_special HidePortrait\n\tdef_special ShowPortraitAt\n\tdef_special ShowPicture\n\tdef_special HidePicture\n", File.ReadAllText(Path.Combine(root, "data", "specials.inc")).Replace("\r\n", "\n"));
         Assert.Single(ModRegistry.Installed(root));
         Assert.False(ModPlanner.Check(root, mod, "1.17.2").CanInstall); // already installed
 
@@ -59,6 +59,26 @@ public class ModTests
         Assert.Equal(0, png.Indices![0]);
         Assert.Throws<ExportValidationException>(() => DialogPortraits.PlanAdd(root, "Prof Birch", Png.Decode(Png.EncodeRgba(img))));
         Assert.Throws<ExportValidationException>(() => DialogPortraits.PlanAdd(root, "Big", Png.Decode(Png.EncodeRgba(new RgbaImage(80, 64)))));
+
+        // A picture: made smaller to 128×96 and stored as six 64×32 pieces one below the other.
+        Assert.True(DialogPortraits.SupportsPictures(root));
+        var map = new RgbaImage(256, 192);
+        for (int y = 0; y < 192; y++) for (int x = 0; x < 256; x++) map[x, y] = x < 128 ? new Rgba32(240, 220, 160) : y < 96 ? new Rgba32(40, 100, 200) : new Rgba32(200, 40, 40);
+        Assert.True(new ExportApplier(backupRoot: TestPaths.NewTempDir("backup")).Apply(DialogPortraits.PlanAddPicture(root, "Treasure map", map)).Success);
+        var pic = Assert.Single(DialogPortraits.ListPictures(root));
+        Assert.Equal(("PICTURE_TREASURE_MAP", 1, "graphics/portraits/pictures/treasure_map.png"), (pic.Constant, pic.Id, pic.PngRel));
+        var sheet = Png.Load(Path.Combine(root, pic.PngRel!));
+        Assert.Equal((64, 192, 4), (sheet.Width, sheet.Height, sheet.BitDepth));
+        var shown = DialogPortraits.PictureForDisplay(sheet);
+        // (colours snapped to the GBA's 5 bits per channel)
+        Assert.True(shown[10, 10].SameRgb(new Rgba32(240, 216, 160)));    // left half: paper
+        Assert.True(shown[100, 10].SameRgb(new Rgba32(40, 96, 200)));    // top right: blue
+        Assert.True(shown[100, 90].SameRgb(new Rgba32(200, 40, 40)));     // bottom right: red
+        // The portrait table and the picture table each got their own entry; portrait numbers ignore the PORTRAIT_POS_ values.
+        var data = File.ReadAllText(Path.Combine(root, DialogPortraits.DataFile));
+        Assert.True(data.IndexOf("[PORTRAIT_PROF_BIRCH]") < data.IndexOf("sDialogPictures[]"));
+        Assert.True(data.IndexOf("[PICTURE_TREASURE_MAP]") > data.IndexOf("sDialogPictures[]"));
+        Assert.Equal(1, DialogPortraits.PlanAdd(root, "Mom", Png.Decode(Png.EncodeRgba(img))).Files.Count(f => f.Description.Contains("= 2")));
 
         // Uninstall: every changed file is byte-identical again, the mod's files and the record are gone.
         var installed = Assert.Single(ModRegistry.Installed(root));
