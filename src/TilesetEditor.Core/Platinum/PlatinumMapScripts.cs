@@ -95,6 +95,45 @@ public sealed partial class PlatinumMapScripts
     [GeneratedRegex(@"^(\w+):\s*$", RegexOptions.Multiline)]
     private static partial Regex LabelLine();
 
+    /// <summary>What <see cref="AddMugshotBefore"/> did.</summary>
+    public sealed record MugshotInsert(string Script, int Added, int Replaced, int SkippedBlockScripts);
+
+    /// <summary>
+    /// Shows a mugshot (mod "Dialog mugshots") right before a text: "ShowMugshot X" (", MUGSHOT_POS_LEFT" on the left) goes
+    /// on the line before every line that shows <paramref name="textId"/> – or only before line <paramref name="lineIndex"/>.
+    /// A ShowMugshot/ClearMugshot right above is replaced instead. Scripts made from blocks are left alone (their blocks
+    /// would write them anew): use the Mugshot block there. Adds #include "constants/mugshots.h" when needed.
+    /// </summary>
+    public static MugshotInsert AddMugshotBefore(string script, string textId, string mugshot, bool left, int? lineIndex = null)
+    {
+        var nl = script.Contains("\r\n") ? "\r\n" : "\n";
+        var lines = script.Replace("\r\n", "\n").Split('\n').ToList();
+        var shows = new Regex(@"^\s*\w*Message\w*\s+(?:\w+\s*,\s*)?" + Regex.Escape(textId) + @"\b");
+        var targets = Enumerable.Range(0, lines.Count).Where(i => (lineIndex == null || i == lineIndex) && shows.IsMatch(lines[i])).ToList();
+        int added = 0, replaced = 0, skipped = 0;
+        var command = left ? $"ShowMugshot {mugshot}, MUGSHOT_POS_LEFT" : $"ShowMugshot {mugshot}";
+        foreach (var i in Enumerable.Reverse(targets))
+        {
+            // The script the line belongs to: the nearest label above it.
+            int at = i;
+            while (at >= 0 && !Regex.IsMatch(lines[at], @"^\w+:\s*$")) at--;
+            if (at >= 0 && at > 0 && lines[at - 1].StartsWith(PlatinumScriptBlocks.Marker, StringComparison.Ordinal)) { skipped++; continue; }
+            var indent = Regex.Match(lines[i], @"^\s*").Value;
+            int prev = i - 1;
+            while (prev >= 0 && lines[prev].Trim().Length == 0) prev--;
+            if (prev >= 0 && Regex.IsMatch(lines[prev], @"^\s*(ShowMugshot|ClearMugshot)\b")) { lines[prev] = indent + command; replaced++; }
+            else { lines.Insert(i, indent + command); added++; }
+        }
+        var result = string.Join(nl, lines);
+        if (added + replaced > 0 && !result.Contains("#include \"constants/mugshots.h\"", StringComparison.Ordinal))
+        {
+            var lastInclude = Regex.Matches(result, @"^#include[^\n]*\n", RegexOptions.Multiline).LastOrDefault();
+            var line = "#include \"constants/mugshots.h\"" + nl;
+            result = lastInclude != null ? result.Insert(lastInclude.Index + lastInclude.Length, line) : line + result;
+        }
+        return new MugshotInsert(result, added, replaced, skipped);
+    }
+
     /// <summary>The map's init script file: res/field/maps/x/init.s (newer pokeplatinum) or the header's initScriptsArchiveID.</summary>
     public static string? InitFile(string root, PlatinumMapHeader h)
     {

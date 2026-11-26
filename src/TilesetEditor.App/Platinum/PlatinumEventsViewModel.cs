@@ -330,7 +330,7 @@ public sealed class PlatinumEventsViewModel : ObservableObject, IToolkitModule
         _textFilter.TextChanged += (_, _) => FilterTexts();
         _textList.SelectionChanged += (_, _) => { if (_tabs.SelectedIndex == 1) ShowTextEditor(); };
         // One mugshot chooser serves both editors: rebuild only the one that is visible.
-        _mugshotPreview.SelectionChanged += (_, _) => { if (_tabs.SelectedIndex == 1) ShowTextEditor(); else _rightRefresh?.Invoke(); };
+        _mugshotPreview.SelectionChanged += (_, _) => { _mugshotAddUpdate?.Invoke(); if (_tabs.SelectedIndex == 1) ShowTextEditor(); else _rightRefresh?.Invoke(); };
         _tabs.SelectionChanged += (_, e) =>
         {
             if (!ReferenceEquals(e.OriginalSource, _tabs)) return;
@@ -1434,7 +1434,7 @@ public sealed class PlatinumEventsViewModel : ObservableObject, IToolkitModule
                 {
                     if (item.Header is DockPanel d && d.Children[1] is TextBlock tb) tb.Text = row.Preview;
                 });
-                MugshotChooser(_right);
+                MugshotChooser(_right, s.MessageId, s.LineIndex);
             }
             Build();
             _rightRefresh = Build;
@@ -1519,7 +1519,9 @@ public sealed class PlatinumEventsViewModel : ObservableObject, IToolkitModule
         _mugshotPreview.SelectedItem = items.Contains(keep ?? "") ? keep : items[0];
     }
 
-    private void MugshotChooser(Panel target)
+    /// <param name="textId">The text shown: offers to put the chosen mugshot into the script right before it.</param>
+    /// <param name="lineIndex">Only before this line of the script file (a step of an event), else before every use.</param>
+    private void MugshotChooser(Panel target, string? textId = null, int? lineIndex = null)
     {
         if (_mugshotPreview.Items.Count <= 1) return;
         Ui.Detach(_mugshotPreview);
@@ -1527,6 +1529,43 @@ public sealed class PlatinumEventsViewModel : ObservableObject, IToolkitModule
         row.Children.Add(new TextBlock { Text = "Preview with mugshot  ", VerticalAlignment = VerticalAlignment.Center });
         row.Children.Add(_mugshotPreview);
         target.Children.Add(row);
+        if (textId == null) return;
+        var result = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0), MaxWidth = 380, HorizontalAlignment = HorizontalAlignment.Left };
+        var add = Ui.Button(lineIndex != null ? "➕ Show it before this text in the script" : "➕ Show it before this text in the scripts",
+            () => result.Text = AddMugshotToScript(textId, lineIndex),
+            "Writes ShowMugshot for the mugshot chosen above (left = mirrored) on the line before the text in the script file. A mugshot command right above is replaced. Save writes it to disk.");
+        void Update() => add.IsEnabled = _mugshotPreview.SelectedIndex > 0 && !_script.IsReadOnly;
+        _mugshotAddUpdate = Update;
+        Update();
+        target.Children.Add(Ui.Row(add));
+        target.Children.Add(result);
+    }
+
+    private Action? _mugshotAddUpdate;
+
+    private string AddMugshotToScript(string textId, int? lineIndex)
+    {
+        var choice = _mugshotPreview.SelectedItem as string ?? "";
+        if (_mugshotPreview.SelectedIndex <= 0) return "Choose a mugshot above first.";
+        bool left = choice.EndsWith(" (left)", StringComparison.Ordinal);
+        var mugshot = left ? choice[..^7] : choice;
+        var r = PlatinumMapScripts.AddMugshotBefore(_script.Text, textId, mugshot, left, lineIndex);
+        if (r.Added + r.Replaced == 0)
+            return r.SkippedBlockScripts > 0
+                ? "✗ This text belongs to a script made from blocks – add the 🖼 Mugshot block there (before the message block)."
+                : "✗ No line of this map's script file shows this text (a shared script or the game's code shows it).";
+        _script.Text = r.Script;
+        Touch();
+        // The steps of the event changed (a new line): show them again.
+        if (lineIndex != null && _selected is { } sel)
+        {
+            var msg = $"✓ {mugshot}{(left ? " (left)" : "")} is shown before this text now (a 🖼 step above it). Save writes it to disk.";
+            Application.Current.Dispatcher.BeginInvoke(() => { ShowEvent(sel); ShowRightHint(msg); });
+            return msg;
+        }
+        var where = r.Added + r.Replaced == 1 ? "before the text" : $"before {r.Added + r.Replaced} uses of the text";
+        return $"✓ {mugshot}{(left ? " (left)" : "")} shown {where}" + (r.Replaced > 0 ? $" ({r.Replaced} mugshot line(s) replaced)" : "") +
+               (r.SkippedBlockScripts > 0 ? $"; {r.SkippedBlockScripts} use(s) in block scripts left alone" : "") + ". Save writes it to disk.";
     }
 
     private RgbaImage? PictureImage(string? c)
@@ -1594,7 +1633,7 @@ public sealed class PlatinumEventsViewModel : ObservableObject, IToolkitModule
         var textIndex = _textRows.IndexOf(row);
         _textEditor.Children.Add(Ui.Row(Ui.Button("📄 Show in the code", () => ShowTextInCode(row.Id, textIndex), "Opens the script file at the line that shows this text, with the text's id highlighted (F3 = next use).")));
         WriterFor(_textEditor, row, "Text – Enter = next line, an empty line = next message box");
-        MugshotChooser(_textEditor);
+        MugshotChooser(_textEditor, row.Id);
     }
 
     private void NewText()

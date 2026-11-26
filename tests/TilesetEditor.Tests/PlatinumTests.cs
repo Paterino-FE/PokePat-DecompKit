@@ -1033,6 +1033,26 @@ public class PlatinumTests
     }
 
     [Fact]
+    public void AMugshotCanBePutBeforeAnyText()
+    {
+        var script = "#include \"macros/scrcmd.inc\"\n\nTown_Man:\n    LockAll\n    Message Town_Text_Hi\n    WaitButton\n    ShowMugshot MUGSHOT_OLD\n    Message Town_Text_Bye\n    End\n\n" +
+                     PlatinumScriptBlocks.Marker + "AAAA */\nTown_Blocks:\n    Message Town_Text_Hi\n    End\n";
+        var r = PlatinumMapScripts.AddMugshotBefore(script, "Town_Text_Hi", "MUGSHOT_REYA", left: true);
+        Assert.Equal((1, 0, 1), (r.Added, r.Replaced, r.SkippedBlockScripts));   // the block script is left alone
+        Assert.Contains("    ShowMugshot MUGSHOT_REYA, MUGSHOT_POS_LEFT\n    Message Town_Text_Hi\n", r.Script);
+        Assert.Contains("#include \"macros/scrcmd.inc\"\n#include \"constants/mugshots.h\"\n", r.Script);
+        // A mugshot right above is replaced, not doubled.
+        var again = PlatinumMapScripts.AddMugshotBefore(r.Script, "Town_Text_Bye", "MUGSHOT_REYA", left: false);
+        Assert.Equal((0, 1), (again.Added, again.Replaced));
+        Assert.DoesNotContain("MUGSHOT_OLD", again.Script);
+        // Only before one line (a step of an event).
+        var lines = script.Split('\n');
+        int line = Array.FindIndex(lines, l => l.Contains("Message Town_Text_Hi"));
+        Assert.Equal(1, PlatinumMapScripts.AddMugshotBefore(script, "Town_Text_Hi", "MUGSHOT_REYA", false, line).Added);
+        Assert.Equal(0, PlatinumMapScripts.AddMugshotBefore(script, "Town_Text_Hi", "MUGSHOT_REYA", false, line + 1).Added);
+    }
+
+    [Fact]
     public void ModEditsPreferTheSourceOverAGeneratedFile()
     {
         var root = TestPaths.NewTempDir("generated");
