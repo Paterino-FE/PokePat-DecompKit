@@ -61,8 +61,40 @@ cp "$work/app/TilesetEditor.exe" "$win/PokePatDecompKit.exe"
 mv "$win/cli/tileset-editor-cli.exe" "$win/cli/decompkit.exe"
 common "$win"
 
+# Windows caches the program file of a running PokePat (started from \\wsl.localhost): replacing it underneath mixes old
+# and new parts (e.g. "FileNotFoundException: System.Security.Cryptography"). Wait until it is closed.
+if command -v tasklist.exe >/dev/null 2>&1; then
+  waited=0
+  while tasklist.exe 2>/dev/null | tr -d '\r' | grep -i '^PokePatDecompKit.exe' >/dev/null; do
+    [ $waited -eq 0 ] && echo "PokePat is still running – close it to replace testbuild/ (waiting up to 30 minutes …)" >&2
+    sleep 3; waited=$((waited + 3))
+    if [ $waited -ge 1800 ]; then echo "PokePat was not closed – testbuild/ was not replaced." >&2; exit 1; fi
+  done
+fi
 rm -rf "$root/testbuild"
 cp -r "$win" "$root/testbuild"
+# A copy on the Windows drive starts several seconds faster than one on the WSL share (Windows reads and checks the
+# whole 66 MB exe over the share on every start) and shows its icon in Explorer.
+localwin=""
+if command -v cmd.exe >/dev/null 2>&1; then
+  lad=$(cd /mnt/c 2>/dev/null && cmd.exe /c "echo %LOCALAPPDATA%" 2>/dev/null | tr -d '\r')
+  if [ -n "$lad" ] && localwin=$(wslpath "$lad" 2>/dev/null) && [ -d "$localwin" ]; then
+    rm -rf "$localwin/PokePat-testbuild"
+    cp -r "$win" "$localwin/PokePat-testbuild"
+    echo "Windows copy: $lad\\PokePat-testbuild\\PokePatDecompKit.exe"
+  fi
+fi
+
+# More places for the test build, one folder per line in .devbuild-targets (local, not committed), e.g. /mnt/d/PokePat
+# for D:\PokePat. The folder gets exactly the files of the build (others in it are removed).
+if [ -f "$root/.devbuild-targets" ]; then
+  while IFS= read -r target || [ -n "$target" ]; do
+    target="${target%%#*}"; target="$(echo "$target" | xargs)"
+    [ -z "$target" ] && continue
+    case "$target" in /|/mnt|/mnt/?|/home|"$HOME") echo "Skipping unsafe target $target" >&2; continue;; esac
+    mkdir -p "$target" && rsync -a --delete "$win/" "$target/" && echo "Copy: $target/PokePatDecompKit.exe"
+  done < "$root/.devbuild-targets"
+fi
 
 if $release; then
   # ---------------- Linux (command line; needs the .NET 8 runtime)

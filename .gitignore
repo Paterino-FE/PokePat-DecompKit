@@ -32,3 +32,4 @@ release/
 
 # Local work area: pokeemerald-expansion checkout and tools (Porymap, mGBA, Porytiles)
 workspace/
+.devbuild-targets
