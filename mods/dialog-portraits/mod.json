@@ -1,10 +1,10 @@
 {
   "id": "dialog-portraits",
   "name": "Dialog portraits",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "PokePat",
   "category": "Dialogs",
-  "description": "Shows a 64×64 picture of the person who speaks above the message box – like in many modern hacks. Portraits are added in PokePat from any PNG or from a trainer picture; the picture disappears by itself when the message box closes.",
+  "description": "Shows a 64×64 picture of the person who speaks above the message box – on the left or on the right, mirrored if you like – and bigger pictures (up to 128×96, e.g. a map or a letter) in the middle of the screen. Portraits and pictures are added in PokePat from any PNG or from a trainer picture; they disappear by themselves when the message box closes.",
   "min_expansion": "1.8.0",
   "files": [
     {
@@ -35,13 +35,13 @@
       "file": "src/field_message_box.c",
       "type": "insert_after",
       "anchor": "void HideFieldMessageBox(void)\n{\n    DestroyTask_DrawFieldMessage();\n",
-      "text": "    HidePortrait();\n"
+      "text": "    HidePortrait();\n    HidePicture();\n"
     },
     {
       "file": "data/specials.inc",
       "type": "append",
       "anchor": "",
-      "text": "\tdef_special ShowPortrait\n\tdef_special HidePortrait\n"
+      "text": "\tdef_special ShowPortrait\n\tdef_special HidePortrait\n\tdef_special ShowPortraitAt\n\tdef_special ShowPicture\n\tdef_special HidePicture\n"
     },
     {
       "file": "data/event_scripts.s",
@@ -50,5 +50,5 @@
       "text": "#include \"constants/dialog_portraits.h\"\n"
     }
   ],
-  "usage": "In the event builder use the blocks \"Show portrait\" and \"Hide portrait\" (or in a script: setvar VAR_0x8004, PORTRAIT_X / special ShowPortrait). Add portraits under Mods → Dialog portraits."
+  "usage": "In the event builder use the blocks \"Show portrait\" (left/right, mirrored), \"Hide portrait\", \"Show picture\" and \"Hide picture\". In a script: setvar VAR_0x8004, PORTRAIT_X / special ShowPortrait – or additionally setvar VAR_0x8005, PORTRAIT_POS_RIGHT / special ShowPortraitAt; pictures: setvar VAR_0x8004, PICTURE_X / special ShowPicture. Add portraits and pictures under Mods → Dialog portraits."
 }

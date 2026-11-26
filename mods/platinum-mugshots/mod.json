@@ -1,0 +1,123 @@
+{
+  "id": "platinum-mugshots",
+  "name": "Dialog mugshots",
+  "version": "1.2.0",
+  "author": "PokePat",
+  "game": "platinum",
+  "category": "Dialogs",
+  "description": "Shows a 64×64 picture of the person who speaks next to the message box – on the right, or on the left (mirrored, so the person looks at the text). A script chooses it with ShowMugshot MUGSHOT_X (or ShowMugshot MUGSHOT_X, MUGSHOT_POS_LEFT) before Message; it disappears with ClearMugshot or when the message box closes. Bigger pictures (e.g. a treasure map, up to 192 tiles such as 128×96) are shown in the middle with ShowPicture PICTURE_X and hidden with HidePicture or CloseMessage. Full-screen pictures (256×192, up to 255 colours) get a screen of their own like the Town Map: ShowFullscreenPicture FULLSCREEN_X fades out, shows the picture until A or B is pressed and comes back. Mugshots and pictures are managed in PokePat (Mugshots module, after switching the mod on). Uses new script commands – the commands of the original game stay untouched.",
+  "files": [
+    {
+      "from": "files/src/field_mugshot.c",
+      "to": "src/field_mugshot.c"
+    },
+    {
+      "from": "files/include/field_mugshot.h",
+      "to": "include/field_mugshot.h"
+    },
+    {
+      "from": "files/include/constants/mugshots.h",
+      "to": "include/constants/mugshots.h"
+    },
+    {
+      "from": "files/include/data/field_pictures.h",
+      "to": "include/data/field_pictures.h"
+    },
+    {
+      "from": "files/res/graphics/map_popups/mugshots/meson.build",
+      "to": "res/graphics/map_popups/mugshots/meson.build"
+    },
+    {
+      "from": "files/res/graphics/map_popups/mugshots/map_popup.order",
+      "to": "res/graphics/map_popups/mugshots/map_popup.order"
+    },
+    {
+      "from": "files/res/graphics/map_popups/mugshots/mugshot_example.png",
+      "to": "res/graphics/map_popups/mugshots/mugshot_example.png"
+    },
+    {
+      "from": "files/res/graphics/map_popups/mugshots/fullscreen_example.png",
+      "to": "res/graphics/map_popups/mugshots/fullscreen_example.png"
+    }
+  ],
+  "edits": [
+    {
+      "file": "src/meson.build",
+      "type": "insert_after",
+      "anchor": "    'field_message.c',\n",
+      "text": "    'field_mugshot.c',\n",
+      "alt": [
+        {
+          "file": "platinum.us/main.lsf.in",
+          "type": "insert_after",
+          "anchor": "\tObject src/field_message.c\n",
+          "text": "\tObject src/field_mugshot.c\n"
+        }
+      ]
+    },
+    {
+      "file": "res/graphics/map_popups/meson.build",
+      "type": "insert_before",
+      "anchor": "map_popup_narc = custom_target(",
+      "text": "# PokePat mod platinum-mugshots: dialog pictures, stored after the map popups.\nsubdir('mugshots')\n\nmugshot_ncgrs = ncgr_gen.process(\n    mugshot_files,\n    extra_args: [\n        '-version101',\n        '-sopc',\n        '-convertTo4Bpp',\n        '-width', '8',\n    ]\n)\n\nmugshot_nclrs = nclr_gen.process(\n    mugshot_files,\n    extra_args: [\n        '-bitdepth', '4'\n    ]\n)\n\nfullscreen_ncgrs = ncgr_gen.process(\n    fullscreen_files,\n    extra_args: [\n        '-version101',\n        '-sopc',\n        '-bitdepth', '8',\n    ]\n)\n\nfullscreen_nclrs = nclr_gen.process(\n    fullscreen_files,\n    extra_args: [\n        '-bitdepth', '8'\n    ]\n)\n\n"
+    },
+    {
+      "file": "res/graphics/map_popups/meson.build",
+      "type": "replace",
+      "anchor": "        map_popup_nclrs,\n    ],\n",
+      "text": "        map_popup_nclrs,\n        mugshot_ncgrs,\n        mugshot_nclrs,\n        fullscreen_ncgrs,\n        fullscreen_nclrs,\n    ],\n"
+    },
+    {
+      "file": "res/graphics/map_popups/meson.build",
+      "type": "replace",
+      "anchor": "'--files-from', files('map_popup.order'),",
+      "text": "'--files-from', files('mugshots/map_popup.order'),"
+    },
+    {
+      "file": "include/data/scripts/scrcmd.h",
+      "type": "insert_after",
+      "anchor": "ScriptCommand(SCRCMD_BUFFERFLOORNUMBER,                                    ScrCmd_BufferFloorNumber)\n",
+      "text": "ScriptCommand(SCRCMD_SHOWMUGSHOT,                                          ScrCmd_ShowMugshot)\nScriptCommand(SCRCMD_CLEARMUGSHOT,                                         ScrCmd_ClearMugshot)\nScriptCommand(SCRCMD_SHOWPICTURE,                                          ScrCmd_ShowPicture)\nScriptCommand(SCRCMD_HIDEPICTURE,                                          ScrCmd_HidePicture)\nScriptCommand(SCRCMD_SHOWFULLSCREENPICTURE,                                ScrCmd_ShowFullscreenPicture)\n"
+    },
+    {
+      "file": "asm/macros/scrcmd.inc",
+      "type": "insert_before",
+      "anchor": "    .text\n    .globl _start\n",
+      "text": "    @ PokePat mod platinum-mugshots\n    .macro ShowMugshot mugshot, side=0\n    .short SCRCMD_SHOWMUGSHOT\n    .short \\mugshot\n    .short \\side\n    .endm\n\n    .macro ClearMugshot\n    .short SCRCMD_CLEARMUGSHOT\n    .endm\n\n    .macro ShowPicture picture\n    .short SCRCMD_SHOWPICTURE\n    .short \\picture\n    .endm\n\n    .macro HidePicture\n    .short SCRCMD_HIDEPICTURE\n    .endm\n\n    .macro ShowFullscreenPicture picture\n    FadeScreenOut\n    WaitFadeScreen\n    .short SCRCMD_SHOWFULLSCREENPICTURE\n    .short \\picture\n    ReturnToField\n    FadeScreenIn\n    WaitFadeScreen\n    .endm\n\n"
+    },
+    {
+      "file": "src/scrcmd.c",
+      "type": "insert_after",
+      "anchor": "#include \"scrcmd_trainer.h\"\n",
+      "text": "#include \"field_mugshot.h\"\n"
+    },
+    {
+      "file": "src/scrcmd.c",
+      "type": "replace",
+      "anchor": "    ScriptMessage_Show(ctx, ctx->loader, messageID, TRUE, NULL);\n    ScriptContext_Pause(ctx, ScriptContext_WaitForFinishedPrinting);\n",
+      "text": "    ScriptMessage_Show(ctx, ctx->loader, messageID, TRUE, NULL);\n\n    if (FieldMugshot_IsSet()) { // PokePat mod platinum-mugshots: draw the message box again over the picture\n        Window_CopyToVRAM(FieldSystem_GetScriptMemberPtr(ctx->fieldSystem, SCRIPT_MANAGER_WINDOW));\n    }\n\n    ScriptContext_Pause(ctx, ScriptContext_WaitForFinishedPrinting);\n"
+    },
+    {
+      "file": "src/scrcmd.c",
+      "type": "replace",
+      "anchor": "    Window_EraseMessageBox(window, FALSE);\n    Window_Remove(window);\n\n    *isMsgBoxOpen = FALSE;",
+      "text": "    Window_EraseMessageBox(window, FALSE);\n    Window_Remove(window);\n    FieldMugshot_Set(0); // PokePat mod platinum-mugshots: the picture goes with the box\n    FieldMugshot_Clear();\n    FieldPicture_Hide();\n\n    *isMsgBoxOpen = FALSE;"
+    },
+    {
+      "file": "src/overlay005/script_message.c",
+      "type": "insert_after",
+      "anchor": "#include \"text.h\"\n",
+      "text": "#include \"field_mugshot.h\"\n"
+    },
+    {
+      "file": "src/overlay005/script_message.c",
+      "type": "replace",
+      "anchor": "    InitScriptMessage(ctx->fieldSystem, &msgData);\n    OpenMessageBox(ctx->fieldSystem, &msgData);\n    LoadAndFormatMessage(&msgData, msgLoader, messageID);\n\n    if (msgOptions == NULL) {\n        renderDelay = GetTextFrameDelay(ctx);",
+      "text": "    InitScriptMessage(ctx->fieldSystem, &msgData);\n    OpenMessageBox(ctx->fieldSystem, &msgData);\n    FieldMugshot_Draw(ctx->fieldSystem); // PokePat mod platinum-mugshots\n    LoadAndFormatMessage(&msgData, msgLoader, messageID);\n\n    if (msgOptions == NULL) {\n        renderDelay = GetTextFrameDelay(ctx);"
+    }
+  ],
+  "owned_folders": [
+    "res/graphics/map_popups/mugshots"
+  ],
+  "usage": "In a script: #include \"constants/mugshots.h\" at the top, then\n    ShowMugshot MUGSHOT_EXAMPLE                     (right of the box)\n    ShowMugshot MUGSHOT_EXAMPLE, MUGSHOT_POS_LEFT   (left, mirrored)\n    Message 0\n    WaitButton\n    CloseMessage\nThe mugshot stays for all messages until the box closes (CloseMessage) or ClearMugshot.\nA picture: ShowPicture PICTURE_TREASURE_MAP … HidePicture (or CloseMessage).\nA full-screen picture (after CloseMessage): ShowFullscreenPicture FULLSCREEN_EXAMPLE – A or B closes it.\nIn PokePat: Mugshots module (add mugshots and pictures), Events & Dialogs → blocks \"Mugshot\" and \"Picture\"."
+}

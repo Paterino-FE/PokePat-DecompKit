@@ -4,5 +4,8 @@
 // Dialog portraits – a PokePat mod. See src/dialog_portraits.c.
 void ShowPortrait(void);
 void HidePortrait(void);
+void ShowPortraitAt(void);
+void ShowPicture(void);
+void HidePicture(void);
 
 #endif // GUARD_DIALOG_PORTRAITS_H

@@ -58,6 +58,14 @@ public sealed class ExportApplier(IExportFileSystem? fileSystem = null, string? 
     private const string TempSuffix = ".tileseteditor-tmp";
     private readonly IExportFileSystem _fs = fileSystem ?? new PhysicalExportFileSystem();
 
+    /// <summary>A plan title as folder name: characters Windows does not allow (: / \ ? * " &lt; &gt; |) become "-".</summary>
+    public static string SafeFolderName(string title)
+    {
+        var bad = Path.GetInvalidFileNameChars().Concat([':', '/', '\\', '?', '*', '"', '<', '>', '|']).ToHashSet();
+        var name = new string(title.Select(c => bad.Contains(c) || char.IsControl(c) ? '-' : c).ToArray()).Trim().TrimEnd('.');
+        return name.Length == 0 ? "changes" : name.Length > 60 ? name[..60] : name;
+    }
+
     public static string DefaultBackupRoot =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TilesetEditor", "backups");
 
@@ -86,7 +94,8 @@ public sealed class ExportApplier(IExportFileSystem? fileSystem = null, string? 
         }
 
         // 2. Backup of files that will be modified
-        string backupDir = Path.Combine(backupRoot ?? DefaultBackupRoot, DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + plan.TilesetName);
+        string backupDir = Path.Combine(backupRoot ?? DefaultBackupRoot, DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + SafeFolderName(plan.TilesetName));
+        for (int n = 2; _fs.DirectoryExists(backupDir); n++) backupDir = Path.Combine(backupRoot ?? DefaultBackupRoot, DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + SafeFolderName(plan.TilesetName) + "-" + n);
         var backups = new Dictionary<string, string>();
         try
         {
@@ -143,6 +152,14 @@ public sealed class ExportApplier(IExportFileSystem? fileSystem = null, string? 
                 BackupDir = backupDir,
             };
         }
+
+        // What this change did, so the Backups module can show it and undo it later (a failure here changes nothing).
+        try
+        {
+            _fs.CreateDirectory(backupDir);
+            _fs.WriteAllBytes(Path.Combine(backupDir, BackupHistory.ManifestName), BackupHistory.Manifest(plan, backups.Keys));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
 
         return new ExportResult
         {

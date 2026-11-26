@@ -1,0 +1,233 @@
+{
+  "id": "platinum-hms-from-bag",
+  "name": "HMs without the move",
+  "version": "1.0.0",
+  "author": "PokePat",
+  "game": "platinum",
+  "category": "Field",
+  "description": "Cut, Rock Smash, Strength, Surf, Waterfall and Rock Climb work when the player owns the HM and the badge – no Pokémon has to know the move. Press A at the tree, rock, water … or choose \"Pokémon\" in the start menu while facing it. A Pokémon that knows the move is shown when there is one, otherwise the first one in the party.",
+  "files": [],
+  "edits": [
+    {
+      "file": "res/field/scripts/scripts_field_moves.s",
+      "type": "replace",
+      "anchor": "    FindPartySlotWithMove VAR_RESULT, MOVE_CUT\n    GoToIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_CantUseCut\n",
+      "text": "    CheckItem ITEM_HM01, 1, VAR_RESULT\n    GoToIfEq VAR_RESULT, FALSE, FieldMoves_CantUseCut\n",
+      "alt": [
+        {
+          "file": "res/field/scripts/field_moves.s",
+          "type": "replace",
+          "anchor": "    FindPartySlotWithMove VAR_RESULT, MOVE_CUT\n    GoToIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_CantUseCut\n",
+          "text": "    CheckItem ITEM_HM01, 1, VAR_RESULT\n    GoToIfEq VAR_RESULT, FALSE, FieldMoves_CantUseCut\n"
+        }
+      ]
+    },
+    {
+      "file": "res/field/scripts/scripts_field_moves.s",
+      "type": "replace",
+      "anchor": "FieldMoves_UseCutFromField:\n    FindPartySlotWithMove VAR_RESULT, MOVE_CUT\n    SetVar VAR_0x8004, VAR_RESULT\n",
+      "text": "FieldMoves_UseCutFromField:\n    FindPartySlotWithMove VAR_RESULT, MOVE_CUT\n    CallIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_UseFirstPartySlot\n    SetVar VAR_0x8004, VAR_RESULT\n",
+      "alt": [
+        {
+          "file": "res/field/scripts/field_moves.s",
+          "type": "replace",
+          "anchor": "FieldMoves_UseCutFromField:\n    FindPartySlotWithMove VAR_RESULT, MOVE_CUT\n    SetVar VAR_0x8004, VAR_RESULT\n",
+          "text": "FieldMoves_UseCutFromField:\n    FindPartySlotWithMove VAR_RESULT, MOVE_CUT\n    CallIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_UseFirstPartySlot\n    SetVar VAR_0x8004, VAR_RESULT\n"
+        }
+      ]
+    },
+    {
+      "file": "res/field/scripts/scripts_field_moves.s",
+      "type": "replace",
+      "anchor": "    FindPartySlotWithMove VAR_RESULT, MOVE_ROCK_SMASH\n    SetVar VAR_0x8004, VAR_RESULT\n    GoToIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_CantUseRockSmash\n",
+      "text": "    CheckItem ITEM_HM06, 1, VAR_RESULT\n    GoToIfEq VAR_RESULT, FALSE, FieldMoves_CantUseRockSmash\n    FindPartySlotWithMove VAR_RESULT, MOVE_ROCK_SMASH\n    CallIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_UseFirstPartySlot\n    SetVar VAR_0x8004, VAR_RESULT\n",
+      "alt": [
+        {
+          "file": "res/field/scripts/field_moves.s",
+          "type": "replace",
+          "anchor": "    FindPartySlotWithMove VAR_RESULT, MOVE_ROCK_SMASH\n    SetVar VAR_0x8004, VAR_RESULT\n    GoToIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_CantUseRockSmash\n",
+          "text": "    CheckItem ITEM_HM06, 1, VAR_RESULT\n    GoToIfEq VAR_RESULT, FALSE, FieldMoves_CantUseRockSmash\n    FindPartySlotWithMove VAR_RESULT, MOVE_ROCK_SMASH\n    CallIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_UseFirstPartySlot\n    SetVar VAR_0x8004, VAR_RESULT\n"
+        }
+      ]
+    },
+    {
+      "file": "res/field/scripts/scripts_field_moves.s",
+      "type": "replace",
+      "anchor": "    FindPartySlotWithMove VAR_RESULT, MOVE_STRENGTH\n    GoToIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_CantUseStrength\n",
+      "text": "    CheckItem ITEM_HM04, 1, VAR_RESULT\n    GoToIfEq VAR_RESULT, FALSE, FieldMoves_CantUseStrength\n",
+      "alt": [
+        {
+          "file": "res/field/scripts/field_moves.s",
+          "type": "replace",
+          "anchor": "    FindPartySlotWithMove VAR_RESULT, MOVE_STRENGTH\n    GoToIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_CantUseStrength\n",
+          "text": "    CheckItem ITEM_HM04, 1, VAR_RESULT\n    GoToIfEq VAR_RESULT, FALSE, FieldMoves_CantUseStrength\n"
+        }
+      ]
+    },
+    {
+      "file": "res/field/scripts/scripts_field_moves.s",
+      "type": "replace",
+      "anchor": "    DoStrengthFunc FIELD_MOVE_FUNC_SET_ACTIVE\n    FindPartySlotWithMove VAR_RESULT, MOVE_STRENGTH\n    SetVar VAR_0x8004, VAR_RESULT\n",
+      "text": "    DoStrengthFunc FIELD_MOVE_FUNC_SET_ACTIVE\n    FindPartySlotWithMove VAR_RESULT, MOVE_STRENGTH\n    CallIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_UseFirstPartySlot\n    SetVar VAR_0x8004, VAR_RESULT\n",
+      "alt": [
+        {
+          "file": "res/field/scripts/field_moves.s",
+          "type": "replace",
+          "anchor": "    DoStrengthFunc FIELD_MOVE_FUNC_SET_ACTIVE\n    FindPartySlotWithMove VAR_RESULT, MOVE_STRENGTH\n    SetVar VAR_0x8004, VAR_RESULT\n",
+          "text": "    DoStrengthFunc FIELD_MOVE_FUNC_SET_ACTIVE\n    FindPartySlotWithMove VAR_RESULT, MOVE_STRENGTH\n    CallIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_UseFirstPartySlot\n    SetVar VAR_0x8004, VAR_RESULT\n"
+        }
+      ]
+    },
+    {
+      "file": "res/field/scripts/scripts_field_moves.s",
+      "type": "replace",
+      "anchor": "    FindPartySlotWithMove VAR_RESULT, MOVE_ROCK_CLIMB\n    GoToIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_CantUseRockClimb\n",
+      "text": "    CheckItem ITEM_HM08, 1, VAR_RESULT\n    GoToIfEq VAR_RESULT, FALSE, FieldMoves_CantUseRockClimb\n",
+      "alt": [
+        {
+          "file": "res/field/scripts/field_moves.s",
+          "type": "replace",
+          "anchor": "    FindPartySlotWithMove VAR_RESULT, MOVE_ROCK_CLIMB\n    GoToIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_CantUseRockClimb\n",
+          "text": "    CheckItem ITEM_HM08, 1, VAR_RESULT\n    GoToIfEq VAR_RESULT, FALSE, FieldMoves_CantUseRockClimb\n"
+        }
+      ]
+    },
+    {
+      "file": "res/field/scripts/scripts_field_moves.s",
+      "type": "replace",
+      "anchor": "FieldMoves_UseRockClimbFromField:\n    FindPartySlotWithMove VAR_RESULT, MOVE_ROCK_CLIMB\n    SetVar VAR_0x8004, VAR_RESULT\n",
+      "text": "FieldMoves_UseRockClimbFromField:\n    FindPartySlotWithMove VAR_RESULT, MOVE_ROCK_CLIMB\n    CallIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_UseFirstPartySlot\n    SetVar VAR_0x8004, VAR_RESULT\n",
+      "alt": [
+        {
+          "file": "res/field/scripts/field_moves.s",
+          "type": "replace",
+          "anchor": "FieldMoves_UseRockClimbFromField:\n    FindPartySlotWithMove VAR_RESULT, MOVE_ROCK_CLIMB\n    SetVar VAR_0x8004, VAR_RESULT\n",
+          "text": "FieldMoves_UseRockClimbFromField:\n    FindPartySlotWithMove VAR_RESULT, MOVE_ROCK_CLIMB\n    CallIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_UseFirstPartySlot\n    SetVar VAR_0x8004, VAR_RESULT\n"
+        }
+      ]
+    },
+    {
+      "file": "res/field/scripts/scripts_field_moves.s",
+      "type": "replace",
+      "anchor": "FieldMoves_UseSurfFromField:\n    FindPartySlotWithMove VAR_RESULT, MOVE_SURF\n    SetVar VAR_0x8004, VAR_RESULT\n",
+      "text": "FieldMoves_UseSurfFromField:\n    FindPartySlotWithMove VAR_RESULT, MOVE_SURF\n    CallIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_UseFirstPartySlot\n    SetVar VAR_0x8004, VAR_RESULT\n",
+      "alt": [
+        {
+          "file": "res/field/scripts/field_moves.s",
+          "type": "replace",
+          "anchor": "FieldMoves_UseSurfFromField:\n    FindPartySlotWithMove VAR_RESULT, MOVE_SURF\n    SetVar VAR_0x8004, VAR_RESULT\n",
+          "text": "FieldMoves_UseSurfFromField:\n    FindPartySlotWithMove VAR_RESULT, MOVE_SURF\n    CallIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_UseFirstPartySlot\n    SetVar VAR_0x8004, VAR_RESULT\n"
+        }
+      ]
+    },
+    {
+      "file": "res/field/scripts/scripts_field_moves.s",
+      "type": "replace",
+      "anchor": "    FindPartySlotWithMove VAR_RESULT, MOVE_WATERFALL\n    GoToIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_CantUseWaterfall\n",
+      "text": "    CheckItem ITEM_HM07, 1, VAR_RESULT\n    GoToIfEq VAR_RESULT, FALSE, FieldMoves_CantUseWaterfall\n",
+      "alt": [
+        {
+          "file": "res/field/scripts/field_moves.s",
+          "type": "replace",
+          "anchor": "    FindPartySlotWithMove VAR_RESULT, MOVE_WATERFALL\n    GoToIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_CantUseWaterfall\n",
+          "text": "    CheckItem ITEM_HM07, 1, VAR_RESULT\n    GoToIfEq VAR_RESULT, FALSE, FieldMoves_CantUseWaterfall\n"
+        }
+      ]
+    },
+    {
+      "file": "res/field/scripts/scripts_field_moves.s",
+      "type": "replace",
+      "anchor": "FieldMoves_UseWaterfallFromField:\n    FindPartySlotWithMove VAR_RESULT, MOVE_WATERFALL\n    SetVar VAR_0x8004, VAR_RESULT\n",
+      "text": "FieldMoves_UseWaterfallFromField:\n    FindPartySlotWithMove VAR_RESULT, MOVE_WATERFALL\n    CallIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_UseFirstPartySlot\n    SetVar VAR_0x8004, VAR_RESULT\n",
+      "alt": [
+        {
+          "file": "res/field/scripts/field_moves.s",
+          "type": "replace",
+          "anchor": "FieldMoves_UseWaterfallFromField:\n    FindPartySlotWithMove VAR_RESULT, MOVE_WATERFALL\n    SetVar VAR_0x8004, VAR_RESULT\n",
+          "text": "FieldMoves_UseWaterfallFromField:\n    FindPartySlotWithMove VAR_RESULT, MOVE_WATERFALL\n    CallIfEq VAR_RESULT, MAX_PARTY_SIZE, FieldMoves_UseFirstPartySlot\n    SetVar VAR_0x8004, VAR_RESULT\n"
+        }
+      ]
+    },
+    {
+      "file": "res/field/scripts/scripts_field_moves.s",
+      "type": "insert_before",
+      "anchor": "FieldMoves_Dummy8:\n    End\n",
+      "text": "// PokePat mod platinum-hms-from-bag: no Pokémon knows the move – the first one in the party is shown.\nFieldMoves_UseFirstPartySlot:\n    SetVar VAR_RESULT, 0\n    Return\n\n",
+      "alt": [
+        {
+          "file": "res/field/scripts/field_moves.s",
+          "type": "insert_before",
+          "anchor": "FieldMoves_Dummy8:\n    End\n",
+          "text": "// PokePat mod platinum-hms-from-bag: no Pokémon knows the move – the first one in the party is shown.\nFieldMoves_UseFirstPartySlot:\n    SetVar VAR_RESULT, 0\n    Return\n\n"
+        }
+      ]
+    },
+    {
+      "file": "src/overlay005/field_control.c",
+      "type": "insert_after",
+      "anchor": "#include \"save_player.h\"\n",
+      "text": "#include \"bag.h\"\n#include \"generated/items.h\"\n"
+    },
+    {
+      "file": "src/overlay005/field_control.c",
+      "type": "replace",
+      "anchor": "            if (Party_HasMonWithMove(SaveData_GetParty(fieldSystem->saveData), MOVE_SURF) != PARTY_SLOT_NONE) {\n",
+      "text": "            if (Bag_GetItemQuantity(SaveData_GetBag(fieldSystem->saveData), ITEM_HM03, HEAP_ID_FIELD1) > 0) { // PokePat mod platinum-hms-from-bag\n"
+    },
+    {
+      "file": "src/field_move_tasks.c",
+      "type": "insert_after",
+      "anchor": "#include \"vars_flags.h\"\n",
+      "text": "#include \"bag.h\"\n#include \"generated/items.h\"\n"
+    },
+    {
+      "file": "src/field_move_tasks.c",
+      "type": "insert_before",
+      "anchor": "void FieldMoves_SetUsableMoves(FieldSystem *fieldSystem, FieldMoveContext *fieldMoveContext)\n",
+      "text": "// PokePat mod platinum-hms-from-bag\nstatic BOOL PlayerHasHM(const FieldSystem *fieldSystem, u16 item)\n{\n    return Bag_GetItemQuantity(SaveData_GetBag(fieldSystem->saveData), item, HEAP_ID_FIELD2) > 0;\n}\n\n"
+    },
+    {
+      "file": "src/field_move_tasks.c",
+      "type": "replace",
+      "anchor": "        case OBJ_EVENT_GFX_STRENGTH_BOULDER:\n            fieldMoveContext->usableMoves |= FIELD_MOVE_FLAG(FIELD_MOVE_STRENGTH);\n            break;\n        case OBJ_EVENT_GFX_ROCK_SMASH:\n            fieldMoveContext->usableMoves |= FIELD_MOVE_FLAG(FIELD_MOVE_ROCK_SMASH);\n            break;\n        case OBJ_EVENT_GFX_CUT_TREE:\n            fieldMoveContext->usableMoves |= FIELD_MOVE_FLAG(FIELD_MOVE_CUT);\n            break;\n",
+      "text": "        case OBJ_EVENT_GFX_STRENGTH_BOULDER:\n            if (PlayerHasHM(fieldSystem, ITEM_HM04)) {\n                fieldMoveContext->usableMoves |= FIELD_MOVE_FLAG(FIELD_MOVE_STRENGTH);\n            }\n            break;\n        case OBJ_EVENT_GFX_ROCK_SMASH:\n            if (PlayerHasHM(fieldSystem, ITEM_HM06)) {\n                fieldMoveContext->usableMoves |= FIELD_MOVE_FLAG(FIELD_MOVE_ROCK_SMASH);\n            }\n            break;\n        case OBJ_EVENT_GFX_CUT_TREE:\n            if (PlayerHasHM(fieldSystem, ITEM_HM01)) {\n                fieldMoveContext->usableMoves |= FIELD_MOVE_FLAG(FIELD_MOVE_CUT);\n            }\n            break;\n"
+    },
+    {
+      "file": "src/field_move_tasks.c",
+      "type": "replace",
+      "anchor": "    if (PlayerAvatar_CanUseSurf(fieldSystem->playerAvatar, currTileBehavior, nextTileBehavior)) {\n",
+      "text": "    if (PlayerAvatar_CanUseSurf(fieldSystem->playerAvatar, currTileBehavior, nextTileBehavior) && PlayerHasHM(fieldSystem, ITEM_HM03)) {\n"
+    },
+    {
+      "file": "src/field_move_tasks.c",
+      "type": "replace",
+      "anchor": "    if (PlayerAvatar_CanUseRockClimb(nextTileBehavior, PlayerAvatar_GetFacingDir(fieldSystem->playerAvatar))) {\n",
+      "text": "    if (PlayerAvatar_CanUseRockClimb(nextTileBehavior, PlayerAvatar_GetFacingDir(fieldSystem->playerAvatar)) && PlayerHasHM(fieldSystem, ITEM_HM08)) {\n"
+    },
+    {
+      "file": "src/field_move_tasks.c",
+      "type": "replace",
+      "anchor": "    if (TileBehavior_IsWaterfall(nextTileBehavior)) {\n",
+      "text": "    if (TileBehavior_IsWaterfall(nextTileBehavior) && PlayerHasHM(fieldSystem, ITEM_HM07)) {\n"
+    },
+    {
+      "file": "src/start_menu.c",
+      "type": "insert_after",
+      "anchor": "static BOOL StartMenu_SelectPokemon(FieldTask *fieldTask);\n",
+      "text": "static BOOL StartMenu_TryUseDirectFieldMove(FieldTask *fieldTask);\n"
+    },
+    {
+      "file": "src/start_menu.c",
+      "type": "replace",
+      "anchor": "static BOOL StartMenu_SelectPokemon(FieldTask *fieldTask)\n{\n    StartMenu *menu = FieldTask_GetEnv(fieldTask);\n\n",
+      "text": "static BOOL StartMenu_SelectPokemon(FieldTask *fieldTask)\n{\n    StartMenu *menu = FieldTask_GetEnv(fieldTask);\n\n    if (StartMenu_TryUseDirectFieldMove(fieldTask) == TRUE) { // PokePat mod platinum-hms-from-bag\n        return TRUE;\n    }\n\n"
+    },
+    {
+      "file": "src/start_menu.c",
+      "type": "insert_before",
+      "anchor": "static BOOL StartMenu_OpenPartyMenu(FieldTask *fieldTask)\n{\n",
+      "text": "// PokePat mod platinum-hms-from-bag: facing a tree, rock, water … \"Pokémon\" uses the HM right away.\nstatic BOOL StartMenu_TryUseDirectFieldMove(FieldTask *fieldTask)\n{\n    StartMenu *menu = FieldTask_GetEnv(fieldTask);\n\n    static const enum FieldMoveList sDirectFieldMoves[] = {\n        FIELD_MOVE_CUT,\n        FIELD_MOVE_SURF,\n        FIELD_MOVE_STRENGTH,\n        FIELD_MOVE_ROCK_SMASH,\n        FIELD_MOVE_WATERFALL,\n        FIELD_MOVE_ROCK_CLIMB,\n    };\n\n    for (int i = 0; i < NELEMS(sDirectFieldMoves); i++) {\n        enum FieldMoveList fieldMove = sDirectFieldMoves[i];\n\n        if (!(menu->fieldMoveContext.usableMoves & (1 << fieldMove))) {\n            continue;\n        }\n\n        FieldMoveErrContext check = (FieldMoveErrContext)FieldMove_GetTaskOrError(FIELD_MOVE_ERROR, fieldMove);\n\n        if (check(&menu->fieldMoveContext) == FIELD_MOVE_ERROR_NONE) {\n            FieldSystem *fieldSystem = FieldTask_GetFieldSystem(fieldTask);\n\n            StartMenu_Close(menu);\n            Window_Remove(&menu->primaryWindow);\n            StartMenu_EraseBallCount(fieldTask);\n            Bg_ScheduleTilemapTransfer(fieldSystem->bgConfig, BG_LAYER_MAIN_3);\n\n            FieldMovePokemon fieldMoveMon;\n\n            fieldMoveMon.fieldMove = fieldMove;\n            fieldMoveMon.fieldMonId = 0;\n            fieldMoveMon.fieldTask = fieldTask;\n\n            FieldMoveTask task = (FieldMoveTask)FieldMove_GetTaskOrError(FIELD_MOVE_TASK, fieldMove);\n            task(&fieldMoveMon, &menu->fieldMoveContext);\n            return TRUE;\n        }\n    }\n\n    return FALSE;\n}\n\n"
+    }
+  ],
+  "usage": "Nothing to do in scripts. The badges stay as in the original game (e.g. Surf needs the Fen Badge). Fly and Defog still need the move."
+}
